@@ -1,7 +1,7 @@
 # Power Patch
 
 <p align="center">
-  <img src="screenshot.png" alt="Screenshot">
+  <img src="screenshot.jpg" alt="Screenshot">
 </p>
 
 A tiny PowerShell GUI that updates the **three big buckets** on Windows:
