@@ -26,9 +26,9 @@ Keeping a Windows PC current often means bouncing between Settings, the Store, a
 
 ### Building from source
 
-- **Visual Studio + MSVC** (the included scripts default to `Visual Studio 18 2026`)
-- **CMake 3.21+**
-- **Qt 6 (Widgets)** (scripts prefer **6.11.0**, fall back to **6.10.1**)
+- **Visual Studio + MSVC**
+- **CMake
+- **Qt 6
 
 ## Quick start
 
