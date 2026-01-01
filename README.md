@@ -45,7 +45,3 @@ Keeping a Windows PC current often means bouncing between Settings, the Store, a
 - Optional toggles:
   - **Close update windows after starting updates**
   - **Send app to system tray when closed**
-
-## Contributing
-
-Issues/PRs welcome—especially around reliability across Windows versions, Store UI changes, and packaging improvements.
