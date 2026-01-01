@@ -1,38 +1,53 @@
 # Power Patch
 
 <p align="center">
-  <img src="screenshot.jpg" alt="Screenshot">
+    <img src="screenshot.jpg" alt="Screenshot">
 </p>
 
-A tiny PowerShell GUI that updates the **three big buckets** on Windows:
-- **Windows OS** (via Windows Update API)
-- **Microsoft Store apps** (via `winget`)
-- **Microsoft 365 (Click-to-Run)**
+A small **native Windows desktop app** that kicks off updates for the **three big buckets** in one place:
 
-> Free to use, download, and edit. MIT license file will be added soon.
+- **Windows OS** (opens Windows Update + triggers a scan when available)
+- **Microsoft Store apps** (opens the Store Library and attempts to press **Check for updates** automatically)
+- **Microsoft 365 (Click-to-Run)** (launches OfficeC2RClient update)
+
+> Free to use, download, and edit. A license file will be added soon.
 
 ---
 
 ## Why?
-Keeping a Windows box current usually means hopping between Settings, the Store, and Office Updater.  
-**Power Patch** runs them together with one click, optional verbose output, and an auto-reboot prompt.
+
+Keeping a Windows PC current often means bouncing between Settings, the Store, and Office’s updater.  
+**Power Patch** is a quick launcher that starts those update checks with one click.
 
 ## Requirements
-- **Windows 10/11 (build 17763+) or later**
-- **Windows PowerShell 5.1 (Desktop) or later**
-- Administrator rights (UAC prompt on launch)
-- For Store updates: **App Installer / `winget`**
-- For Microsoft 365 updates: **Click-to-Run** installation
+
+- **Windows 11**
+- **Microsoft Store** installed/enabled (for Store app updates)
+- **Microsoft 365 Apps / Office Click-to-Run** install (for M365 updates)
+- Optional: **System tray** support (for “minimize to tray” behavior)
+
+### Building from source
+
+- **Visual Studio + MSVC** (the included scripts default to `Visual Studio 18 2026`)
+- **CMake 3.21+**
+- **Qt 6 (Widgets)** (scripts prefer **6.11.0**, fall back to **6.10.1**)
 
 ## Quick start
-1. **Download/clone** the repo.
-2. Run `src\start.bat` (or use the provided shortcut).
-3. Pick what to update → **Run Selected** or **Run All**.
+
+1. Clone/download the repo.
+2. Run `scripts\oneclick\release_build_run.bat`  
+   _(or do it step-by-step with the scripts in `scripts\cmake\` + `scripts\run\`)_.
+3. In the app, choose **Run all updates** or run each bucket individually.
 
 ## Notes
-- Respects WSUS/policy—if online updates are blocked, Windows Update may fail.
-- Office updates only run when Click-to-Run is detected.
-- The app can prompt to **restart** when required (optional auto-reboot).
+
+- **Windows Update** can be restricted by **WSUS/MDM** and build capabilities.
+- **Store updates** are UI-driven; if the Store UI changes, you may need to click manually.
+- **Office updates** run only when **Click-to-Run** is detected.
+- Optional toggles:
+  - **Close update windows after starting updates**
+  - **Send app to system tray when closed**
 
 ## Contributing
-The contributing process may open up more in the near future.
+
+Issues/PRs welcome—especially around reliability across Windows versions, Store UI changes, and packaging improvements.
