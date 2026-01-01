@@ -34,7 +34,6 @@ Keeping a Windows PC current often means bouncing between Settings, the Store, a
 
 1. Clone/download the repo.
 2. Run `scripts\oneclick\release_build_run.bat`  
-   _(or do it step-by-step with the scripts in `scripts\cmake\` + `scripts\run\`)_.
 3. In the app, choose **Run all updates** or run each bucket individually.
 
 ## Notes
