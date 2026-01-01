@@ -10,8 +10,6 @@ A small **native Windows desktop app** that kicks off updates for the **three bi
 - **Microsoft Store apps** (opens the Store Library and attempts to press **Check for updates** automatically)
 - **Microsoft 365 (Click-to-Run)** (launches OfficeC2RClient update)
 
-> Free to use, download, and edit. A license file will be added soon.
-
 ---
 
 ## Why?
