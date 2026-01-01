@@ -27,8 +27,8 @@ Keeping a Windows PC current often means bouncing between Settings, the Store, a
 ### Building from source
 
 - **Visual Studio + MSVC**
-- **CMake
-- **Qt 6
+- **CMake**
+- **Qt 6**
 
 ## Quick start
 
