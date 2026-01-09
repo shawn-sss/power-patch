@@ -1,6 +1,5 @@
 @echo off
-REM Install the Release build
-
+REM Installs the Release build to the install directory
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0..\.."
 call "scripts\cmake\project_settings.bat" --from-script
@@ -12,7 +11,6 @@ echo.
 
 if not exist "!BUILD_DIR!\CMakeCache.txt" (
   echo [ERROR] Build folder is not configured.
-  echo        Run scripts\cmake\cmake_configure.bat first.
   goto :endfail
 )
 

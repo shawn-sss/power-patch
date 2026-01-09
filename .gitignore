@@ -7,10 +7,14 @@ CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 CTestTestfile.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
 
 *_autogen/
 
 .vs/
+.vscode/
 *.sln
 *.slnx
 *.vcxproj
@@ -32,3 +36,11 @@ CTestTestfile.cmake
 *.sdf
 *.VC.db
 *.VC.VC.opendb
+
+*.rsp
+*.suo
+*.ncb
+*.aps
+
+.DS_Store
+Thumbs.db

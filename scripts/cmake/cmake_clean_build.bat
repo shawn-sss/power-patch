@@ -1,6 +1,5 @@
 @echo off
-REM Delete the build folder
-
+REM Deletes the build folder only
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0..\.."
 call "scripts\cmake\project_settings.bat" --from-script

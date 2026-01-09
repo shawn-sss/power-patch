@@ -1,5 +1,7 @@
 # Power Patch
 
+**Version 1.0**
+
 <p align="center">
     <img src="screenshot.jpg" alt="Screenshot">
 </p>
@@ -8,7 +10,7 @@ A small **native Windows desktop app** that kicks off updates for the **three bi
 
 - **Windows OS** (opens Windows Update + triggers a scan when available)
 - **Microsoft Store apps** (opens the Store Library and attempts to press **Check for updates** automatically)
-- **Microsoft 365 (Click-to-Run)** (launches OfficeC2RClient update)
+- **Microsoft 365** (launches OfficeC2RClient update)
 
 ---
 
@@ -19,10 +21,9 @@ Keeping a Windows PC current often means bouncing between Settings, the Store, a
 
 ## Requirements
 
-- **Windows 11**
+- **Tested on Windows 11 25H2**
 - **Microsoft Store** installed/enabled (for Store app updates)
 - **Microsoft 365 Apps / Office Click-to-Run** install (for M365 updates)
-- Optional: **System tray** support (for “minimize to tray” behavior)
 
 ### Building from source
 
@@ -32,15 +33,15 @@ Keeping a Windows PC current often means bouncing between Settings, the Store, a
 
 ## Quick start
 
-1. Clone/download the repo.
-2. Run `scripts\oneclick\release_build_run.bat`  
-3. In the app, choose **Run all updates** or run each bucket individually.
+1. Launch Power Patch
+2. **Select which updates to run**: Check or uncheck the boxes next to each update type (Windows, Microsoft Store, Microsoft 365)
+3. Click **Run selected updates** to trigger all checked updates at once, or use individual buttons to run specific updates
+4. Optional settings:
+   - **Close update windows after starting updates** - Automatically closes the update windows after initiating the scan/update
+   - **Send app to system tray when closed** - Keeps the app running in the system tray instead of fully closing
 
 ## Notes
 
 - **Windows Update** can be restricted by **WSUS/MDM** and build capabilities.
-- **Store updates** are UI-driven; if the Store UI changes, you may need to click manually.
+- **Store updates** are UI-driven and may break if Microsoft changes the Store interface.
 - **Office updates** run only when **Click-to-Run** is detected.
-- Optional toggles:
-  - **Close update windows after starting updates**
-  - **Send app to system tray when closed**

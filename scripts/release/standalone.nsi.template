@@ -1,0 +1,104 @@
+; Standalone installer template for Power Patch.
+!include "LogicLib.nsh"
+
+Name "Power Patch Standalone"
+OutFile "@@OUTFILE@@"
+Icon "@@ICON@@"
+InstallDir "$LOCALAPPDATA\Power Patch"
+RequestExecutionLevel user
+SilentInstall silent
+SilentUninstall silent
+SetCompress auto
+SetCompressor /SOLID lzma
+ShowInstDetails nevershow
+AutoCloseWindow true
+
+!define APP_VERSION "@@VERSION@@"
+
+Function .onInit
+  ; Trim whitespace function
+FunctionEnd
+
+Function TrimNewlines
+  Exch $R1 ; Original string
+  Push $R2 ; Temp
+  
+  StrCpy $R2 "$R1"
+  
+  ; Remove trailing \r\n
+  ${DoWhile} $R2 != ""
+    StrCpy $R1 $R2 1 -1
+    ${If} $R1 == "$\r"
+    ${OrIf} $R1 == "$\n"
+      StrLen $R1 $R2
+      IntOp $R1 $R1 - 1
+      StrCpy $R2 $R2 $R1
+    ${Else}
+      ${ExitDo}
+    ${EndIf}
+  ${Loop}
+  
+  StrCpy $R1 $R2
+  Pop $R2
+  Exch $R1
+FunctionEnd
+
+Section "Install"
+  ; Check if we can skip extraction
+  SetOutPath "$INSTDIR"
+  
+  ; Check if version file exists and matches
+  ${If} ${FileExists} "$INSTDIR\version.txt"
+    ClearErrors
+    FileOpen $1 "$INSTDIR\version.txt" r
+    FileRead $1 $2
+    FileClose $1
+    
+    ; Trim any whitespace/newlines
+    Push $2
+    Call TrimNewlines
+    Pop $2
+    
+    ; Compare versions
+    ${If} $2 == "${APP_VERSION}"
+      ; Check if all critical files exist
+      ${If} ${FileExists} "$INSTDIR\@@EXE_NAME@@"
+      ${AndIf} ${FileExists} "$INSTDIR\Qt6Core.dll"
+      ${AndIf} ${FileExists} "$INSTDIR\Qt6Gui.dll"
+      ${AndIf} ${FileExists} "$INSTDIR\Qt6Widgets.dll"
+      ${AndIf} ${FileExists} "$INSTDIR\platforms\qwindows.dll"
+        ; Everything is good, just launch
+        Goto launch_app
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  
+  ; Need to extract - preserve settings first
+  ${If} ${FileExists} "$INSTDIR\settings.ini"
+    CopyFiles /SILENT "$INSTDIR\settings.ini" "$TEMP\PowerPatch_settings_backup.ini"
+  ${EndIf}
+  
+  ; Delete old installation
+  RMDir /r "$INSTDIR"
+  CreateDirectory "$INSTDIR"
+  
+  ; Restore settings
+  ${If} ${FileExists} "$TEMP\PowerPatch_settings_backup.ini"
+    CopyFiles /SILENT "$TEMP\PowerPatch_settings_backup.ini" "$INSTDIR\settings.ini"
+    Delete "$TEMP\PowerPatch_settings_backup.ini"
+  ${EndIf}
+  
+  SetOutPath "$INSTDIR"
+  SetOverwrite on
+  ; Extract all files
+  File /r "payload\bin\*.*"
+  
+  ; Write version file
+  FileOpen $1 "$INSTDIR\version.txt" w
+  FileWrite $1 "${APP_VERSION}"
+  FileClose $1
+  
+  launch_app:
+  ; Launch the application
+  ExecShell "" "$INSTDIR\@@EXE_NAME@@"
+SectionEnd

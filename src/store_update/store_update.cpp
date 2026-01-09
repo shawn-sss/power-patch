@@ -1,7 +1,5 @@
 #include "store_update.h"
 
-#include "constants.h"
-
 #ifdef _WIN32
   #ifndef NOMINMAX
     #define NOMINMAX
@@ -15,6 +13,15 @@
   #include <iterator>
   #include <string>
   #include <vector>
+  #include <array>
+
+namespace {
+constexpr int kWindowFindStepMs = 250;
+constexpr int kStoreFindTimeoutMs = 3000;
+constexpr int kStoreButtonPollCount = 30;
+constexpr int kStoreButtonPollSleepMs = 400;
+constexpr int kWaitBeforeCloseMs = 10000;
+}
 
 static bool wcontains_insensitive(std::wstring haystack, std::wstring needle)
 {
@@ -79,7 +86,7 @@ static BOOL CALLBACK enumWindowsFindStore(HWND hwnd, LPARAM lparam)
 
 static HWND findMicrosoftStoreWindow(int timeoutMs)
 {
-    const int stepMs = app_constants::kWindowFindStepMs;
+    const int stepMs = kWindowFindStepMs;
     for (int waited = 0; waited <= timeoutMs; waited += stepMs) {
         FindWindowData data;
         EnumWindows(enumWindowsFindStore, reinterpret_cast<LPARAM>(&data));
@@ -256,7 +263,7 @@ bool openMicrosoftStoreLibrary()
 
 bool clickMicrosoftStoreGetUpdates(bool closeAfter)
 {
-    HWND storeHwnd = findMicrosoftStoreWindow(app_constants::kStoreFindTimeoutMs);
+    HWND storeHwnd = findMicrosoftStoreWindow(kStoreFindTimeoutMs);
     if (!storeHwnd)
         return false;
 
@@ -292,7 +299,7 @@ bool clickMicrosoftStoreGetUpdates(bool closeAfter)
     };
 
     bool ok = false;
-    for (int i = 0; i < app_constants::kStoreButtonPollCount && !ok; ++i) {
+    for (int i = 0; i < kStoreButtonPollCount && !ok; ++i) {
         for (auto *label : candidates) {
             if (tryInvokeButtonByName(automation, windowEl, label)) {
                 ok = true;
@@ -302,11 +309,11 @@ bool clickMicrosoftStoreGetUpdates(bool closeAfter)
         if (!ok)
             ok = tryInvokeAnyUpdateButton(automation, windowEl);
         if (!ok)
-            Sleep(app_constants::kStoreButtonPollSleepMs);
+            Sleep(kStoreButtonPollSleepMs);
     }
 
     if (ok && closeAfter) {
-        Sleep(app_constants::kStoreCloseDelayMs);
+        Sleep(kWaitBeforeCloseMs);
         closeWindowHandle(storeHwnd);
     }
 
@@ -315,4 +322,87 @@ bool clickMicrosoftStoreGetUpdates(bool closeAfter)
     if (didInit) CoUninitialize();
     return ok;
 }
+#ifdef _WIN32
+namespace {
+
+bool readRegistryDword(HKEY root, const wchar_t *subKey, const wchar_t *valueName, DWORD *outValue)
+{
+    if (!subKey || !valueName || !outValue)
+        return false;
+
+    const std::array<REGSAM, 3> accessMasks = {
+        KEY_READ | KEY_WOW64_64KEY,
+        KEY_READ | KEY_WOW64_32KEY,
+        KEY_READ,
+    };
+
+    for (const REGSAM mask : accessMasks) {
+        HKEY key = nullptr;
+        const LONG rc = RegOpenKeyExW(root, subKey, 0, mask, &key);
+        if (rc != ERROR_SUCCESS)
+            continue;
+
+        DWORD data = 0;
+        DWORD type = 0;
+        DWORD size = sizeof(data);
+        const LONG queryRc = RegQueryValueExW(key, valueName, nullptr, &type, reinterpret_cast<LPBYTE>(&data), &size);
+        RegCloseKey(key);
+        if (queryRc != ERROR_SUCCESS || type != REG_DWORD)
+            continue;
+
+        *outValue = data;
+        return true;
+    }
+
+    return false;
+}
+
+bool isMicrosoftStorePolicyDisabled()
+{
+    const std::array<const wchar_t *, 3> subKeys = {
+        L"SOFTWARE\\Policies\\Microsoft\\WindowsStore",
+        L"SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer",
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer",
+    };
+    const std::array<const wchar_t *, 3> valueNames = {
+        L"RemoveWindowsStore",
+        L"DisableWindowsStore",
+        L"NoWindowsStore",
+    };
+
+    for (auto root : {HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}) {
+        for (const auto *subKey : subKeys) {
+            for (const auto *valueName : valueNames) {
+                DWORD value = 0;
+                if (readRegistryDword(root, subKey, valueName, &value) && value != 0)
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
+}
+
+MicrosoftStoreStatus queryMicrosoftStoreStatus()
+{
+    if (isMicrosoftStorePolicyDisabled())
+        return MicrosoftStoreStatus::Disabled;
+
+    HKEY protocolKey = nullptr;
+    const LONG rc = RegOpenKeyExW(HKEY_CLASSES_ROOT, L"ms-windows-store", 0, KEY_READ | KEY_WOW64_64KEY, &protocolKey);
+    if (protocolKey)
+        RegCloseKey(protocolKey);
+
+    if (rc != ERROR_SUCCESS)
+        return MicrosoftStoreStatus::Uninstalled;
+
+    return MicrosoftStoreStatus::Available;
+}
+#else
+MicrosoftStoreStatus queryMicrosoftStoreStatus()
+{
+    return MicrosoftStoreStatus::Available;
+}
+#endif
 #endif

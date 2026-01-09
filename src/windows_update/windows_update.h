@@ -4,4 +4,5 @@
 bool openWindowsUpdateSettings();
 bool startWindowsUpdateScan();
 void closeWindowsUpdateWindowAfterDelay(int delayMs);
+bool areWindowsUpdatesDisabled();
 #endif

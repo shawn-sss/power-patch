@@ -16,7 +16,65 @@
 #include <QAction>
 #include <QEvent>
 #include <QSize>
+#include <QStyle>
+#include <QCursor>
+#include <QScreen>
+#include <QGuiApplication>
+#include <QAbstractButton>
+#include <QFile>
+#include <QTextStream>
+#include <QDir>
 #include <thread>
+
+#include "m365_update/m365_update.h"
+#include "store_update/store_update.h"
+#include "windows_update/windows_update.h"
+
+class SimpleSettings {
+public:
+    explicit SimpleSettings(const QString &filePath) : filePath_(filePath) {
+        load();
+    }
+    
+    bool value(const QString &key, bool defaultValue) const {
+        return data_.value(key, defaultValue ? "true" : "false") == "true";
+    }
+    
+    void setValue(const QString &key, bool value) {
+        data_[key] = value ? "true" : "false";
+        save();
+    }
+    
+private:
+    void load() {
+        QFile file(filePath_);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream in(&file);
+            while (!in.atEnd()) {
+                QString line = in.readLine().trimmed();
+                if (!line.isEmpty() && !line.startsWith('#')) {
+                    int idx = line.indexOf('=');
+                    if (idx > 0) {
+                        data_[line.left(idx).trimmed()] = line.mid(idx + 1).trimmed();
+                    }
+                }
+            }
+        }
+    }
+    
+    void save() {
+        QFile file(filePath_);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream out(&file);
+            for (auto it = data_.constBegin(); it != data_.constEnd(); ++it) {
+                out << it.key() << "=" << it.value() << "\n";
+            }
+        }
+    }
+    
+    QString filePath_;
+    QMap<QString, QString> data_;
+};
 
 class TrayCloseFilter : public QObject
 {
@@ -66,14 +124,53 @@ private:
     QApplication *app_;
 };
 
-#include "constants.h"
-#include "m365_update/m365_update.h"
-#include "store_update/store_update.h"
-#include "windows_update/windows_update.h"
+namespace {
+constexpr int kReenableButtonsDelayMs = 1200;
+constexpr int kWaitBeforeCloseMs = 10000;
+}
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+    app.setApplicationName("Power Patch");
+    app.setApplicationDisplayName("Power Patch");
+    app.setOrganizationName("Power Patch");
+    
+    QString exeDir = QCoreApplication::applicationDirPath();
+    
+    bool isDeployed = exeDir.contains("AppData", Qt::CaseInsensitive);
+    
+    if (isDeployed) {
+        QStringList criticalFiles = {
+            "Qt6Core.dll",
+            "Qt6Gui.dll", 
+            "Qt6Widgets.dll",
+            "platforms/qwindows.dll",
+            "styles/qmodernwindowsstyle.dll"
+        };
+        
+        QStringList missingFiles;
+        for (const QString &file : criticalFiles) {
+            if (!QFile::exists(exeDir + "/" + file)) {
+                missingFiles.append(file);
+            }
+        }
+        
+        if (!missingFiles.isEmpty()) {
+            QString errorMsg = "Critical files are missing or corrupted:\n\n";
+            for (const QString &file : missingFiles) {
+                errorMsg += "• " + file + "\n";
+            }
+            errorMsg += "\nPlease re-run the Power Patch installer to repair the application.";
+            
+            QMessageBox::critical(nullptr, "Power Patch - Installation Error", errorMsg);
+            return 1;
+        }
+    }
+    
+    QString settingsPath = exeDir + "/settings.ini";
+    SimpleSettings settings(settingsPath);
+    
     const char *kIcon1024Resource = ":/icons/assets/powerpatch_icon_1024.png";
     const char *kIcon2048Resource = ":/icons/assets/powerpatch_icon_2048.png";
     const char *kMasterIconResource = ":/icons/assets/powerpatch_master.png";
@@ -116,7 +213,7 @@ int main(int argc, char *argv[])
 
     auto *mainLayout = new QVBoxLayout(&window);
     mainLayout->setContentsMargins(16, 16, 16, 16);
-    mainLayout->setSpacing(10);
+    mainLayout->setSpacing(12);
 
     auto *titleLabel = new QLabel("Power Patch");
     {
@@ -153,23 +250,82 @@ int main(int argc, char *argv[])
     statusLabel->setWordWrap(true);
 
     auto *closeUpdateWindowsCheck = new QCheckBox("Close update windows after starting updates");
-    closeUpdateWindowsCheck->setChecked(true);
+    closeUpdateWindowsCheck->setChecked(settings.value("closeUpdateWindows", false));
+    closeUpdateWindowsCheck->setCursor(Qt::PointingHandCursor);
 
     auto *trayOnCloseCheck = new QCheckBox("Send app to system tray when closed");
-    trayOnCloseCheck->setChecked(true);
+    trayOnCloseCheck->setChecked(settings.value("trayOnClose", false));
+    trayOnCloseCheck->setCursor(Qt::PointingHandCursor);
 
-    auto *allUpdateButton = new QPushButton("Run all updates");
+    auto *enableWindowsUpdateCheck = new QCheckBox("");
+    enableWindowsUpdateCheck->setChecked(settings.value("enableWindowsUpdate", true));
+    enableWindowsUpdateCheck->setCursor(Qt::PointingHandCursor);
+    enableWindowsUpdateCheck->setAccessibleName("Enable Windows Update");
+
+    auto *enableStoreUpdateCheck = new QCheckBox("");
+    enableStoreUpdateCheck->setChecked(settings.value("enableStoreUpdate", true));
+    enableStoreUpdateCheck->setCursor(Qt::PointingHandCursor);
+    enableStoreUpdateCheck->setAccessibleName("Enable Microsoft Store updates");
+
+    auto *enableM365UpdateCheck = new QCheckBox("");
+    enableM365UpdateCheck->setChecked(settings.value("enableM365Update", true));
+    enableM365UpdateCheck->setCursor(Qt::PointingHandCursor);
+    enableM365UpdateCheck->setAccessibleName("Enable Microsoft 365 updates");
+    
+    QObject::connect(closeUpdateWindowsCheck, &QCheckBox::toggled, [&settings](bool checked) {
+        settings.setValue("closeUpdateWindows", checked);
+    });
+    QObject::connect(trayOnCloseCheck, &QCheckBox::toggled, [&settings](bool checked) {
+        settings.setValue("trayOnClose", checked);
+    });
+    QObject::connect(enableWindowsUpdateCheck, &QCheckBox::toggled, [&settings](bool checked) {
+        settings.setValue("enableWindowsUpdate", checked);
+    });
+    QObject::connect(enableStoreUpdateCheck, &QCheckBox::toggled, [&settings](bool checked) {
+        settings.setValue("enableStoreUpdate", checked);
+    });
+    QObject::connect(enableM365UpdateCheck, &QCheckBox::toggled, [&settings](bool checked) {
+        settings.setValue("enableM365Update", checked);
+    });
+
+    auto *allUpdateButton = new QPushButton("Run selected updates");
     allUpdateButton->setMinimumHeight(36);
+    allUpdateButton->setCursor(Qt::PointingHandCursor);
 
-    auto *winUpdateButton = new QPushButton("Check Windows updates");
+    auto *winUpdateButton = new QPushButton("Run Windows updates");
     winUpdateButton->setDefault(true);
     winUpdateButton->setMinimumHeight(34);
+    winUpdateButton->setCursor(Qt::PointingHandCursor);
 
-    auto *storeUpdateButton = new QPushButton("Update Microsoft Store apps");
+    auto *storeUpdateButton = new QPushButton("Run Microsoft Store updates");
     storeUpdateButton->setMinimumHeight(34);
+    storeUpdateButton->setCursor(Qt::PointingHandCursor);
 
-    auto *m365UpdateButton = new QPushButton("Update Microsoft 365 (Office)");
+    auto *m365UpdateButton = new QPushButton("Run Microsoft 365 updates");
     m365UpdateButton->setMinimumHeight(34);
+    m365UpdateButton->setCursor(Qt::PointingHandCursor);
+
+    auto updateButtonStates = [allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton,
+                               enableWindowsUpdateCheck, enableStoreUpdateCheck, enableM365UpdateCheck] {
+        const bool anyEnabled = enableWindowsUpdateCheck->isChecked()
+                                || enableStoreUpdateCheck->isChecked()
+                                || enableM365UpdateCheck->isChecked();
+        allUpdateButton->setEnabled(anyEnabled);
+        winUpdateButton->setEnabled(enableWindowsUpdateCheck->isChecked());
+        storeUpdateButton->setEnabled(enableStoreUpdateCheck->isChecked());
+        m365UpdateButton->setEnabled(enableM365UpdateCheck->isChecked());
+    };
+
+    QObject::connect(enableWindowsUpdateCheck, &QCheckBox::toggled, [updateButtonStates](bool) {
+        updateButtonStates();
+    });
+    QObject::connect(enableStoreUpdateCheck, &QCheckBox::toggled, [updateButtonStates](bool) {
+        updateButtonStates();
+    });
+    QObject::connect(enableM365UpdateCheck, &QCheckBox::toggled, [updateButtonStates](bool) {
+        updateButtonStates();
+    });
+    updateButtonStates();
 
     QSystemTrayIcon *trayIcon = nullptr;
     bool allowQuit = false;
@@ -179,24 +335,27 @@ int main(int argc, char *argv[])
         trayIcon->setToolTip("Power Patch");
 
         auto *trayMenu = new QMenu(&window);
+        if (darkMode) {
+            trayMenu->setStyleSheet(
+                "QMenu { min-width: 180px; background-color: #242a31; border: 1px solid #3a424c; border-radius: 8px; }"
+                "QMenu::item { padding: 6px 18px; border-radius: 4px; }"
+                "QMenu::item:selected { background-color: #2f3741; }"
+                "QMenu::separator { height: 1px; background: #3a424c; margin: 4px 6px; }");
+        } else {
+            trayMenu->setStyleSheet(
+                "QMenu { min-width: 180px; background-color: #ffffff; border: 1px solid #d0d6dd; border-radius: 8px; }"
+                "QMenu::item { padding: 6px 18px; border-radius: 4px; }"
+                "QMenu::item:selected { background-color: #eef1f4; }"
+                "QMenu::separator { height: 1px; background: #d0d6dd; margin: 4px 6px; }");
+        }
         auto *openAction = trayMenu->addAction("Open");
-        auto *aboutAction = trayMenu->addAction("About");
-        trayMenu->addSeparator();
-        auto *runAllAction = trayMenu->addAction("Run updates");
-        trayMenu->addSeparator();
+        auto *runAllAction = trayMenu->addAction("Run");
         auto *exitAction = trayMenu->addAction("Exit");
 
         QObject::connect(openAction, &QAction::triggered, [&] {
             window.show();
             window.raise();
             window.activateWindow();
-        });
-        QObject::connect(aboutAction, &QAction::triggered, [&] {
-            QMessageBox aboutBox(&window);
-            aboutBox.setWindowTitle("About Power Patch");
-            aboutBox.setText("Power Patch\nQuick update launcher for Windows.");
-            aboutBox.setIconPixmap(appIconPixmap.scaled(48, 48, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            aboutBox.exec();
         });
         QObject::connect(runAllAction, &QAction::triggered, [&] {
             allUpdateButton->click();
@@ -207,15 +366,36 @@ int main(int argc, char *argv[])
             window.close();
             app.quit();
         });
+        auto showTrayMenuAtCursor = [trayMenu] {
+            trayMenu->ensurePolished();
+            const QPoint cursorPos = QCursor::pos();
+            QSize menuSize = trayMenu->sizeHint();
+            QScreen *screen = QGuiApplication::screenAt(cursorPos);
+            if (!screen)
+                screen = QGuiApplication::primaryScreen();
+            if (screen) {
+                const QRect bounds = screen->availableGeometry();
+                if (cursorPos.x() + menuSize.width() > bounds.right())
+                    menuSize.setWidth(bounds.right() - cursorPos.x());
+                int y = cursorPos.y() - menuSize.height();
+                if (y < bounds.top())
+                    y = bounds.top();
+                trayMenu->popup(QPoint(cursorPos.x(), y));
+            } else {
+                trayMenu->popup(QPoint(cursorPos.x(), cursorPos.y() - menuSize.height()));
+            }
+        };
+
         QObject::connect(trayIcon, &QSystemTrayIcon::activated, [&](QSystemTrayIcon::ActivationReason reason) {
             if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
                 window.show();
                 window.raise();
                 window.activateWindow();
+            } else if (reason == QSystemTrayIcon::Context) {
+                showTrayMenuAtCursor();
             }
         });
 
-        trayIcon->setContextMenu(trayMenu);
         trayIcon->show();
         window.installEventFilter(new TrayCloseFilter(&window, trayOnCloseCheck, &allowQuit, trayIcon, &app, &window));
     } else {
@@ -228,46 +408,51 @@ int main(int argc, char *argv[])
         winUpdateButton->setEnabled(false);
         storeUpdateButton->setEnabled(false);
         m365UpdateButton->setEnabled(false);
-        statusLabel->setText("Checking Windows updates...");
 
 #ifdef _WIN32
-        const bool closeAfter = closeUpdateWindowsCheck->isChecked();
-        const bool scanOk = startWindowsUpdateScan();
-        const bool uiOk = openWindowsUpdateSettings();
-
-        if (closeAfter && uiOk) {
-            std::thread([] {
-                closeWindowsUpdateWindowAfterDelay(app_constants::kCloseWindowsUpdateDelayMs);
-            }).detach();
-        }
-
-        if (!scanOk && !uiOk) {
-            statusLabel->setText("Failed to start Windows Update");
+        const bool windowsDisabled = areWindowsUpdatesDisabled();
+        if (windowsDisabled) {
+            statusLabel->setText("Windows Update disabled");
             QMessageBox::warning(
                 windowPtr,
                 "Power Patch",
-                "Couldn't start a Windows Update scan or open the Windows Update settings page.\n\n"
-                "This feature requires Windows 11 (or later) and access to the Settings app.");
-        } else if (!scanOk && uiOk) {
-            statusLabel->setText("Opened Windows Update (scan may not have started)");
-            QMessageBox::information(
-                windowPtr,
-                "Power Patch",
-                "Windows Update opened, but the scan trigger wasn't available.\n\n"
-                "If it doesn't automatically start scanning, click \"Check for updates\" in the Settings window.");
+                "Windows Update is disabled by the service or policy on this device.\n"
+                "Enable Windows Update before trying again.");
         } else {
-            statusLabel->setText("Windows Update scan started");
+            statusLabel->setText("Checking Windows updates...");
+            const bool closeAfter = closeUpdateWindowsCheck->isChecked();
+            const bool scanOk = startWindowsUpdateScan();
+            const bool uiOk = openWindowsUpdateSettings();
+
+            if (closeAfter && uiOk) {
+                std::thread([] {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeCloseMs));
+                    closeWindowsUpdateWindowAfterDelay(0);
+                }).detach();
+            }
+
+            if (!scanOk && !uiOk) {
+                QMessageBox::warning(
+                    windowPtr,
+                    "Power Patch",
+                    "Couldn't start a Windows Update scan or open the Windows Update settings page.\n"
+                    "This feature requires Windows 11 (or later) and access to the Settings app.");
+            } else if (!scanOk && uiOk) {
+                QMessageBox::information(
+                    windowPtr,
+                    "Power Patch",
+                    "Windows Update opened, but the scan trigger wasn't available.\n"
+                    "If it doesn't automatically start scanning, click \"Check for updates\" in the Settings window.");
+            }
         }
 #else
         statusLabel->setText("Unsupported platform");
         QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows.");
 #endif
 
-        QTimer::singleShot(app_constants::kReenableButtonsDelayMs, windowPtr, [allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton] {
-            allUpdateButton->setEnabled(true);
-            winUpdateButton->setEnabled(true);
-            storeUpdateButton->setEnabled(true);
-            m365UpdateButton->setEnabled(true);
+        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
+            updateButtonStates();
+            statusLabel->setText("Ready");
         });
     });
 
@@ -276,38 +461,49 @@ int main(int argc, char *argv[])
         winUpdateButton->setEnabled(false);
         storeUpdateButton->setEnabled(false);
         m365UpdateButton->setEnabled(false);
-        statusLabel->setText("Checking Microsoft 365 updates...");
 
 #ifdef _WIN32
-        const bool closeAfter = closeUpdateWindowsCheck->isChecked();
-        const bool ok = startMicrosoft365Update();
-        if (!ok) {
-            statusLabel->setText("Failed to start Microsoft 365 update");
+        const Microsoft365UpdateStatus m365Status = queryMicrosoft365UpdateStatus();
+        if (m365Status == Microsoft365UpdateStatus::Disabled) {
+            statusLabel->setText("Microsoft 365 updates disabled");
             QMessageBox::warning(
                 windowPtr,
                 "Power Patch",
-                "Couldn't start Microsoft 365 (Office) updates.\n\n"
-                "This requires a local Microsoft 365 Apps / Office Click-to-Run install.\n"
-                "If you're using a different Office installation type, update it via its own updater or management tooling.");
+                "Microsoft 365 updates are disabled in the Click-to-Run configuration.\nYou must enable them before retrying.");
+        } else if (m365Status == Microsoft365UpdateStatus::NotInstalled) {
+            statusLabel->setText("Microsoft 365 Apps not installed");
+            QMessageBox::warning(
+                windowPtr,
+                "Power Patch",
+                "Microsoft 365 Apps do not appear to be installed on this machine.\nUpdates cannot run.");
         } else {
-            statusLabel->setText("Microsoft 365 update started");
-        }
+            statusLabel->setText("Checking Microsoft 365 updates...");
+            const bool closeAfter = closeUpdateWindowsCheck->isChecked();
+            const bool ok = startMicrosoft365Update();
+            if (!ok) {
+                QMessageBox::warning(
+                    windowPtr,
+                    "Power Patch",
+                    "Couldn't start Microsoft 365 updates.\n"
+                    "This requires a local Microsoft 365 Apps / Office Click-to-Run install.\n"
+                    "If you're using a different Office installation type, update it via its own updater or management tooling.");
+            }
 
-        if (closeAfter && ok) {
-            std::thread([] {
-                closeWindowByProcessAfterDelay(L"OfficeC2RClient.exe", app_constants::kCloseOfficeDelayMs);
-            }).detach();
+            if (closeAfter && ok) {
+                std::thread([] {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeCloseMs));
+                    closeWindowByProcessAfterDelay(L"OfficeC2RClient.exe", 0);
+                }).detach();
+            }
         }
 #else
         statusLabel->setText("Unsupported platform");
         QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows.");
 #endif
 
-        QTimer::singleShot(app_constants::kReenableButtonsDelayMs, windowPtr, [allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton] {
-            allUpdateButton->setEnabled(true);
-            winUpdateButton->setEnabled(true);
-            storeUpdateButton->setEnabled(true);
-            m365UpdateButton->setEnabled(true);
+        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
+            updateButtonStates();
+            statusLabel->setText("Ready");
         });
     });
 
@@ -316,170 +512,311 @@ int main(int argc, char *argv[])
         winUpdateButton->setEnabled(false);
         storeUpdateButton->setEnabled(false);
         m365UpdateButton->setEnabled(false);
-        statusLabel->setText("Checking Microsoft Store app updates...");
 
 #ifdef _WIN32
-        const bool closeAfter = closeUpdateWindowsCheck->isChecked();
-        std::thread([windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton, closeAfter] {
-            const bool opened = openMicrosoftStoreLibrary();
-            bool clicked = false;
-            if (opened)
-                clicked = clickMicrosoftStoreGetUpdates(closeAfter);
+        const MicrosoftStoreStatus storeStatus = queryMicrosoftStoreStatus();
+        if (storeStatus == MicrosoftStoreStatus::Disabled) {
+            statusLabel->setText("Microsoft Store updates disabled");
+            QMessageBox::warning(
+                windowPtr,
+                "Power Patch",
+                "Microsoft Store updates are disabled by policy on this device.\nEnable the Store before retrying.");
+        } else if (storeStatus == MicrosoftStoreStatus::Uninstalled) {
+            statusLabel->setText("Microsoft Store not installed");
+            QMessageBox::warning(
+                windowPtr,
+                "Power Patch",
+                "Microsoft Store appears to be uninstalled on this PC.\nStore updates cannot run.");
+        } else {
+            statusLabel->setText("Checking Microsoft Store app updates...");
+            const bool closeAfter = closeUpdateWindowsCheck->isChecked();
+            std::thread([windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton, closeAfter, updateButtonStates] {
+                const bool opened = openMicrosoftStoreLibrary();
+                bool clicked = false;
+                if (opened)
+                    clicked = clickMicrosoftStoreGetUpdates(closeAfter);
 
-            QMetaObject::invokeMethod(windowPtr,
-                                     [windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton, opened, clicked] {
-                if (!opened) {
-                    statusLabel->setText("Failed to open Microsoft Store");
-                    QMessageBox::warning(
-                        windowPtr,
-                        "Power Patch",
-                        "Couldn't open the Microsoft Store Library page.\n\n"
-                        "Make sure Microsoft Store is installed and enabled on this PC.");
-                } else if (!clicked) {
-                    statusLabel->setText("Opened Store (couldn't click Get updates)");
-                    QMessageBox::information(
-                        windowPtr,
-                        "Power Patch",
-                        "Microsoft Store opened, but the app couldn't automatically click the \"Get updates\" button.\n\n"
-                        "If updates don't start automatically, click \"Get updates\" in the Store Library.");
-                } else {
-                    statusLabel->setText("Microsoft Store update check started");
-                }
+                QMetaObject::invokeMethod(windowPtr,
+                                         [windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton, opened, clicked, updateButtonStates] {
+                    if (!opened) {
+                        QMessageBox::warning(
+                            windowPtr,
+                            "Power Patch",
+                            "Couldn't open the Microsoft Store Library page.\n"
+                            "Make sure Microsoft Store is installed and enabled on this PC.");
+                    } else if (!clicked) {
+                        QMessageBox::information(
+                            windowPtr,
+                            "Power Patch",
+                            "Microsoft Store opened, but the app couldn't automatically click the \"Get updates\" button.\n"
+                            "If updates don't start automatically, click \"Get updates\" in the Store Library.");
+                    }
 
-                QTimer::singleShot(app_constants::kReenableButtonsDelayMs, windowPtr, [allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton] {
-                    allUpdateButton->setEnabled(true);
-                    winUpdateButton->setEnabled(true);
-                    storeUpdateButton->setEnabled(true);
-                    m365UpdateButton->setEnabled(true);
-                });
-            },
-                                     Qt::QueuedConnection);
-        }).detach();
+                    QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
+                        updateButtonStates();
+                        statusLabel->setText("Ready");
+                    });
+                },
+                                         Qt::QueuedConnection);
+            }).detach();
+        }
 #else
         statusLabel->setText("Unsupported platform");
         QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows.");
-        QTimer::singleShot(app_constants::kReenableButtonsDelayMs, windowPtr, [allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton] {
-            allUpdateButton->setEnabled(true);
-            winUpdateButton->setEnabled(true);
-            storeUpdateButton->setEnabled(true);
-            m365UpdateButton->setEnabled(true);
+        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
+            updateButtonStates();
+            statusLabel->setText("Ready");
         });
 #endif
     });
 
+    auto *aboutButton = new QPushButton();
+    aboutButton->setMinimumSize(30, 30);
+    aboutButton->setIcon(window.style()->standardIcon(QStyle::SP_MessageBoxInformation));
+    aboutButton->setCursor(Qt::PointingHandCursor);
+    if (darkMode) {
+        aboutButton->setStyleSheet(
+            "QPushButton { border-radius: 15px; padding: 0px; color: #e6edf3; background-color: #242a31; border: 1px solid #3a424c; }"
+            "QPushButton:hover { border-color: #55606e; }");
+    } else {
+        aboutButton->setStyleSheet(
+            "QPushButton { border-radius: 15px; padding: 0px; color: #1f2328; background-color: #ffffff; border: 1px solid #d0d6dd; }"
+            "QPushButton:hover { border-color: #aeb6bf; }");
+    }
+    QObject::connect(aboutButton, &QPushButton::clicked, [&] {
+        QMessageBox aboutBox(&window);
+        aboutBox.setWindowTitle("About Power Patch");
+        const QString aboutHtml =
+            "<p><b>Power Patch v1.0</b><br/>"
+            "Quick update launcher for Windows.</p>"
+            "<p><span style='color:#7a7a7a; font-size:small;'>Tested on Windows 11 25H2</span></p>"
+            "<p>Windows Update: opens Settings + triggers scan.<br/>"
+            "Microsoft Store: opens Library + clicks Get updates.<br/>"
+            "Microsoft 365: runs OfficeC2RClient update.</p>"
+            "<p>Author: Shawn SSS</p>";
+        aboutBox.setText(aboutHtml);
+        aboutBox.setTextFormat(Qt::RichText);
+        aboutBox.setIconPixmap(appIconPixmap.scaled(48, 48, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        aboutBox.setStandardButtons(QMessageBox::Ok);
+        if (auto *okButton = aboutBox.button(QMessageBox::Ok)) {
+            okButton->setCursor(Qt::PointingHandCursor);
+        }
+        aboutBox.exec();
+    });
+
     auto *headerLayout = new QHBoxLayout();
-    headerLayout->setSpacing(10);
+    headerLayout->setSpacing(12);
     headerLayout->addWidget(iconLabel);
     headerLayout->addWidget(titleLabel, 1, Qt::AlignVCenter | Qt::AlignLeft);
+    headerLayout->addWidget(aboutButton, 0, Qt::AlignVCenter | Qt::AlignRight);
 
     mainLayout->addLayout(headerLayout);
     mainLayout->addWidget(subtitleLabel);
+    mainLayout->addItem(new QSpacerItem(0, 6, QSizePolicy::Minimum, QSizePolicy::Fixed));
     mainLayout->addWidget(statusLabel);
     mainLayout->addWidget(closeUpdateWindowsCheck);
     mainLayout->addWidget(trayOnCloseCheck);
+    auto *divider = new QFrame();
+    divider->setFrameShape(QFrame::HLine);
+    divider->setFrameShadow(QFrame::Sunken);
+    mainLayout->addWidget(divider);
     QObject::connect(allUpdateButton, &QPushButton::clicked, [&] {
+        bool winEnabled = enableWindowsUpdateCheck->isChecked();
+        bool storeEnabled = enableStoreUpdateCheck->isChecked();
+        bool m365Enabled = enableM365UpdateCheck->isChecked();
+        if (!winEnabled && !storeEnabled && !m365Enabled) {
+            statusLabel->setText("All updates disabled");
+            return;
+        }
+
         allUpdateButton->setEnabled(false);
         winUpdateButton->setEnabled(false);
         storeUpdateButton->setEnabled(false);
         m365UpdateButton->setEnabled(false);
-        statusLabel->setText("Starting all updates...");
 
 #ifdef _WIN32
+        if (winEnabled && areWindowsUpdatesDisabled()) {
+            winEnabled = false;
+            statusLabel->setText("Windows Update disabled");
+                QMessageBox::warning(
+                    windowPtr,
+                    "Power Patch",
+                    "Windows Update is disabled by the service or policy on this device.\n"
+                    "Enable Windows Update before trying again.");
+        }
+
+        if (storeEnabled) {
+            const MicrosoftStoreStatus storeStatus = queryMicrosoftStoreStatus();
+            if (storeStatus == MicrosoftStoreStatus::Disabled) {
+                storeEnabled = false;
+                statusLabel->setText("Microsoft Store updates disabled");
+                QMessageBox::warning(
+                    windowPtr,
+                    "Power Patch",
+                    "Microsoft Store updates are disabled by policy on this device.\nEnable the Store before retrying.");
+            } else if (storeStatus == MicrosoftStoreStatus::Uninstalled) {
+                storeEnabled = false;
+                statusLabel->setText("Microsoft Store not installed");
+                QMessageBox::warning(
+                    windowPtr,
+                    "Power Patch",
+                    "Microsoft Store appears to be uninstalled on this PC.\nStore updates cannot run.");
+            }
+        }
+
+        if (m365Enabled) {
+            const Microsoft365UpdateStatus m365Status = queryMicrosoft365UpdateStatus();
+            if (m365Status == Microsoft365UpdateStatus::Disabled) {
+                m365Enabled = false;
+                statusLabel->setText("Microsoft 365 updates disabled");
+            QMessageBox::warning(
+                windowPtr,
+                "Power Patch",
+                "Microsoft 365 updates are disabled in the Click-to-Run configuration.\nYou must enable them before retrying.");
+            } else if (m365Status == Microsoft365UpdateStatus::NotInstalled) {
+                m365Enabled = false;
+                statusLabel->setText("Microsoft 365 Apps not installed");
+            QMessageBox::warning(
+                windowPtr,
+                "Power Patch",
+                "Microsoft 365 Apps do not appear to be installed on this machine.\nUpdates cannot run.");
+            }
+        }
+
+        if (!winEnabled && !storeEnabled && !m365Enabled) {
+            QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
+                updateButtonStates();
+                statusLabel->setText("Ready");
+            });
+            return;
+        }
+
         const bool closeAfter = closeUpdateWindowsCheck->isChecked();
-        std::thread([windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton, closeAfter] {
+        std::thread([windowPtr, statusLabel, closeAfter, winEnabled, storeEnabled, m365Enabled, updateButtonStates] {
             bool winScanOk = false;
             bool winUiOk = false;
             bool storeOpened = false;
             bool storeClicked = false;
             bool officeOk = false;
 
-            winScanOk = startWindowsUpdateScan();
-            winUiOk = openWindowsUpdateSettings();
-            if (closeAfter && winUiOk)
-                closeWindowsUpdateWindowAfterDelay(app_constants::kCloseWindowsUpdateDelayMs);
-            QMetaObject::invokeMethod(windowPtr, [statusLabel] {
-                statusLabel->setText("Windows Update started. Moving to Store...");
-            }, Qt::QueuedConnection);
+            if (winEnabled) {
+                QMetaObject::invokeMethod(windowPtr, [statusLabel] {
+                    statusLabel->setText("Starting Windows Update...");
+                }, Qt::QueuedConnection);
+                winScanOk = startWindowsUpdateScan();
+                winUiOk = openWindowsUpdateSettings();
+                if (closeAfter && winUiOk) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeCloseMs));
+                    closeWindowsUpdateWindowAfterDelay(0);
+                }
+            }
 
-            storeOpened = openMicrosoftStoreLibrary();
-            if (storeOpened)
-                storeClicked = clickMicrosoftStoreGetUpdates(closeAfter);
-            QMetaObject::invokeMethod(windowPtr, [statusLabel] {
-                statusLabel->setText("Store updates started. Moving to Microsoft 365...");
-            }, Qt::QueuedConnection);
+            if (storeEnabled) {
+                QMetaObject::invokeMethod(windowPtr, [statusLabel] {
+                    statusLabel->setText("Starting Store updates...");
+                }, Qt::QueuedConnection);
+                storeOpened = openMicrosoftStoreLibrary();
+                if (storeOpened)
+                    storeClicked = clickMicrosoftStoreGetUpdates(closeAfter);
+            }
 
-            officeOk = startMicrosoft365Update();
-            if (closeAfter && officeOk)
-                closeWindowByProcessAfterDelay(L"OfficeC2RClient.exe", app_constants::kCloseOfficeDelayMs);
+            if (m365Enabled) {
+                QMetaObject::invokeMethod(windowPtr, [statusLabel] {
+                    statusLabel->setText("Starting Microsoft 365 update...");
+                }, Qt::QueuedConnection);
+                officeOk = startMicrosoft365Update();
+                if (closeAfter && officeOk) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeCloseMs));
+                    closeWindowByProcessAfterDelay(L"OfficeC2RClient.exe", 0);
+                }
+            }
+
             QMetaObject::invokeMethod(windowPtr,
-                                     [windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton,
-                                      winScanOk, winUiOk, storeOpened, storeClicked, officeOk] {
-                if (!winScanOk && !winUiOk) {
-                    QMessageBox::warning(
-                        windowPtr,
-                        "Power Patch",
-                        "Windows Update did not start. The Settings page might not be available on this system.");
-                } else if (!winScanOk && winUiOk) {
-                    QMessageBox::information(
-                        windowPtr,
-                        "Power Patch",
-                        "Windows Update opened, but the scan trigger wasn't available.\n\n"
-                        "If it doesn't automatically start scanning, click \"Check for updates\" in the Settings window.");
+                                     [windowPtr, statusLabel, winEnabled, storeEnabled, m365Enabled,
+                                      winScanOk, winUiOk, storeOpened, storeClicked, officeOk, updateButtonStates] {
+                if (winEnabled) {
+                    if (!winScanOk && !winUiOk) {
+                        QMessageBox::warning(
+                            windowPtr,
+                            "Power Patch",
+                            "Windows Update did not start. The Settings page might not be available on this system.");
+                    } else if (!winScanOk && winUiOk) {
+                        QMessageBox::information(
+                            windowPtr,
+                            "Power Patch",
+                            "Windows Update opened, but the scan trigger wasn't available.\n"
+                            "If it doesn't automatically start scanning, click \"Check for updates\" in the Settings window.");
+                    }
                 }
 
-                if (!storeOpened) {
-                    QMessageBox::warning(
-                        windowPtr,
-                        "Power Patch",
-                        "Couldn't open the Microsoft Store Library page.\n\n"
-                        "Make sure Microsoft Store is installed and enabled on this PC.");
-                } else if (!storeClicked) {
-                    QMessageBox::information(
-                        windowPtr,
-                        "Power Patch",
-                        "Microsoft Store opened, but the app couldn't automatically click the \"Get updates\" button.\n\n"
-                        "If updates don't start automatically, click \"Get updates\" in the Store Library.");
+                if (storeEnabled) {
+                    if (!storeOpened) {
+                        QMessageBox::warning(
+                            windowPtr,
+                            "Power Patch",
+                                    "Couldn't open the Microsoft Store Library page.\n"
+                                    "Make sure Microsoft Store is installed and enabled on this PC.");
+                    } else if (!storeClicked) {
+                        QMessageBox::information(
+                            windowPtr,
+                            "Power Patch",
+                                    "Microsoft Store opened, but the app couldn't automatically click the \"Get updates\" button.\n"
+                                    "If updates don't start automatically, click \"Get updates\" in the Store Library.");
+                    }
                 }
 
-                if (!officeOk) {
+                if (m365Enabled && !officeOk) {
                     QMessageBox::warning(
                         windowPtr,
                         "Power Patch",
-                        "Couldn't start Microsoft 365 (Office) updates.\n\n"
+                        "Couldn't start Microsoft 365 updates.\n"
                         "This requires a local Microsoft 365 Apps / Office Click-to-Run install.\n"
                         "If you're using a different Office installation type, update it via its own updater or management tooling.");
                 }
 
-                if ((winScanOk || winUiOk) && storeOpened && officeOk) {
-                    statusLabel->setText("All update checks started");
-                } else {
-                    statusLabel->setText("All updates finished with some issues");
-                }
+                bool allOk = true;
+                if (winEnabled && !(winScanOk || winUiOk))
+                    allOk = false;
+                if (storeEnabled && !storeOpened)
+                    allOk = false;
+                if (m365Enabled && !officeOk)
+                    allOk = false;
 
-                QTimer::singleShot(app_constants::kReenableButtonsDelayMs, windowPtr, [allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton] {
-                    allUpdateButton->setEnabled(true);
-                    winUpdateButton->setEnabled(true);
-                    storeUpdateButton->setEnabled(true);
-                    m365UpdateButton->setEnabled(true);
+                QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
+                    updateButtonStates();
+                    statusLabel->setText("Ready");
                 });
             }, Qt::QueuedConnection);
         }).detach();
 #else
         statusLabel->setText("Unsupported platform");
         QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows.");
-        QTimer::singleShot(app_constants::kReenableButtonsDelayMs, windowPtr, [allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton] {
-            allUpdateButton->setEnabled(true);
-            winUpdateButton->setEnabled(true);
-            storeUpdateButton->setEnabled(true);
-            m365UpdateButton->setEnabled(true);
+        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
+            updateButtonStates();
+            statusLabel->setText("Ready");
         });
 #endif
     });
 
     mainLayout->addWidget(allUpdateButton);
-    mainLayout->addWidget(winUpdateButton);
-    mainLayout->addWidget(storeUpdateButton);
-    mainLayout->addWidget(m365UpdateButton);
+
+    auto *winUpdateLayout = new QHBoxLayout();
+    winUpdateLayout->setSpacing(10);
+    winUpdateLayout->addWidget(enableWindowsUpdateCheck);
+    winUpdateLayout->addWidget(winUpdateButton, 1);
+    mainLayout->addLayout(winUpdateLayout);
+
+    auto *storeUpdateLayout = new QHBoxLayout();
+    storeUpdateLayout->setSpacing(10);
+    storeUpdateLayout->addWidget(enableStoreUpdateCheck);
+    storeUpdateLayout->addWidget(storeUpdateButton, 1);
+    mainLayout->addLayout(storeUpdateLayout);
+
+    auto *m365UpdateLayout = new QHBoxLayout();
+    m365UpdateLayout->setSpacing(10);
+    m365UpdateLayout->addWidget(enableM365UpdateCheck);
+    m365UpdateLayout->addWidget(m365UpdateButton, 1);
+    mainLayout->addLayout(m365UpdateLayout);
 
     window.resize(420, 280);
     window.show();

@@ -1,6 +1,5 @@
 @echo off
-REM Delete build, dist, and install folders
-
+REM Deletes all generated folders (build, dist, install)
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0..\.."
 call "scripts\cmake\project_settings.bat" --from-script

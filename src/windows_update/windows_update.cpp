@@ -1,17 +1,21 @@
 #include "windows_update.h"
 
-#include "constants.h"
-
 #ifdef _WIN32
   #ifndef NOMINMAX
     #define NOMINMAX
   #endif
-  #include <windows.h>
-  #include <shellapi.h>
-  #include <cstdint>
-  #include <cwctype>
-  #include <iterator>
-  #include <string>
+#include <windows.h>
+#include <shellapi.h>
+#include <cstdint>
+#include <cwctype>
+#include <iterator>
+#include <string>
+#include <vector>
+
+namespace {
+constexpr int kWindowFindStepMs = 250;
+constexpr int kWindowsUpdateFindTimeoutMs = 3000;
+}
 
 static std::wstring systemExePath(const wchar_t *exeName)
 {
@@ -153,7 +157,7 @@ static HWND findWindowByProcessName(const wchar_t *exeName, int timeoutMs)
     if (!exeName || timeoutMs <= 0)
         return nullptr;
 
-    const int stepMs = app_constants::kWindowFindStepMs;
+    const int stepMs = kWindowFindStepMs;
     for (int waited = 0; waited <= timeoutMs; waited += stepMs) {
         FindWindowByProcessData data;
         data.exeName = exeName;
@@ -170,7 +174,7 @@ static HWND findWindowByTitleContains(const wchar_t *titleNeedle, int timeoutMs)
     if (!titleNeedle || timeoutMs <= 0)
         return nullptr;
 
-    const int stepMs = app_constants::kWindowFindStepMs;
+    const int stepMs = kWindowFindStepMs;
     for (int waited = 0; waited <= timeoutMs; waited += stepMs) {
         FindWindowByTitleData data;
         data.titleNeedle = titleNeedle;
@@ -232,13 +236,55 @@ void closeWindowsUpdateWindowAfterDelay(int delayMs)
     if (delayMs > 0)
         Sleep(delayMs);
 
-    HWND hwnd = findWindowByProcessName(L"SystemSettings.exe", app_constants::kWindowsUpdateFindTimeoutMs);
+    HWND hwnd = findWindowByProcessName(L"SystemSettings.exe", kWindowsUpdateFindTimeoutMs);
     if (!hwnd)
-        hwnd = findWindowByProcessName(L"ApplicationFrameHost.exe", app_constants::kWindowsUpdateFindTimeoutMs);
+        hwnd = findWindowByProcessName(L"ApplicationFrameHost.exe", kWindowsUpdateFindTimeoutMs);
     if (!hwnd)
-        hwnd = findWindowByTitleContains(L"Windows Update", app_constants::kWindowsUpdateFindTimeoutMs);
+        hwnd = findWindowByTitleContains(L"Windows Update", kWindowsUpdateFindTimeoutMs);
 
     if (hwnd)
         closeWindowHandle(hwnd);
+}
+#endif
+
+#ifdef _WIN32
+bool areWindowsUpdatesDisabled()
+{
+    const SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+    if (!scm)
+        return false;
+
+    const SC_HANDLE svc = OpenServiceW(scm, L"wuauserv", SERVICE_QUERY_CONFIG);
+    if (!svc) {
+        CloseServiceHandle(scm);
+        return false;
+    }
+
+    DWORD needed = 0;
+    QueryServiceConfigW(svc, nullptr, 0, &needed);
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || needed == 0) {
+        CloseServiceHandle(svc);
+        CloseServiceHandle(scm);
+        return false;
+    }
+
+    std::vector<BYTE> buffer;
+    buffer.resize(needed);
+    auto *config = reinterpret_cast<QUERY_SERVICE_CONFIGW *>(buffer.data());
+    if (!QueryServiceConfigW(svc, config, needed, &needed)) {
+        CloseServiceHandle(svc);
+        CloseServiceHandle(scm);
+        return false;
+    }
+
+    const bool disabled = config->dwStartType == SERVICE_DISABLED;
+    CloseServiceHandle(svc);
+    CloseServiceHandle(scm);
+    return disabled;
+}
+#else
+bool areWindowsUpdatesDisabled()
+{
+    return false;
 }
 #endif

@@ -1,5 +1,5 @@
 @echo off
-REM One-click: configure, build Debug, run Debug.
+REM One-click script to configure, build, and run Debug
 setlocal
 
 pushd "%~dp0\..\.."
@@ -13,14 +13,17 @@ if errorlevel 1 goto :fail
 call "scripts\run\run_debug.bat"
 if errorlevel 1 goto :fail
 
-goto :done
+echo.
+echo [OK] Debug build+run completed successfully.
+popd
+endlocal
+pause
+exit /b 0
 
 :fail
 echo.
 echo [FAIL] One-click Debug build+run failed.
-echo        Fix the error above and try again.
-echo.
-
-:done
 popd
+endlocal
 pause
+exit /b 1

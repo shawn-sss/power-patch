@@ -1,11 +1,13 @@
 @echo off
-REM Run the app in Debug
-
+REM Runs the Debug build executable
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0..\.."
 call "scripts\cmake\project_settings.bat" --from-script
 
 set "APP_EXE=!BUILD_DIR!\Debug\!PROJECT_NAME!.exe"
+if not exist "!APP_EXE!" (
+  set "APP_EXE=!BUILD_DIR!\!PROJECT_NAME!.exe"
+)
 
 echo [Run] Configuration: Debug
 echo [Run] Executable: !APP_EXE!
@@ -14,7 +16,6 @@ echo.
 
 if not exist "!APP_EXE!" (
   echo [ERROR] Executable not found.
-  echo        Build first: scripts\cmake\cmake_build_debug.bat
   goto :endfail
 )
 

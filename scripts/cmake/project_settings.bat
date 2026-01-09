@@ -1,6 +1,5 @@
 @echo off
-REM Set shared script settings (Qt, generator, and folder names)
-
+REM Defines project configuration variables for all build scripts
 if /i "%~1"=="--from-script" goto :fromscript
 
 setlocal EnableExtensions EnableDelayedExpansion
@@ -12,7 +11,7 @@ set "BUILD_DIR=build"
 set "DIST_DIR=dist"
 set "INSTALL_DIR=install"
 
-set "CMAKE_GENERATOR=Visual Studio 18 2026"
+set "CMAKE_GENERATOR=NMake Makefiles"
 set "CMAKE_ARCH=x64"
 
 set "QT_KIT=msvc2022_64"

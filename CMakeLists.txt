@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(PowerPatch VERSION 0.1.0 LANGUAGES CXX)
+project(PowerPatch VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,7 +9,7 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 qt_standard_project_setup()
 
-qt_add_executable(${PROJECT_NAME}
+qt_add_executable(${PROJECT_NAME} WIN32
     src/main.cpp
     src/m365_update/m365_update.cpp
     src/store_update/store_update.cpp
@@ -28,7 +28,7 @@ qt_add_resources(${PROJECT_NAME} app_resources
 )
 
 if (WIN32)
-    target_sources(${PROJECT_NAME} PRIVATE src/app_icon.rc)
+    target_sources(${PROJECT_NAME} PRIVATE src/app_resources.rc)
     target_link_libraries(${PROJECT_NAME} PRIVATE Shell32 Ole32 OleAut32 UIAutomationCore)
 endif()
 

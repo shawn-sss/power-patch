@@ -1,7 +1,5 @@
 #include "m365_update.h"
 
-#include "constants.h"
-
 #ifdef _WIN32
   #ifndef NOMINMAX
     #define NOMINMAX
@@ -12,6 +10,12 @@
   #include <iterator>
   #include <string>
   #include <vector>
+  #include <array>
+
+namespace {
+constexpr int kWindowFindStepMs = 250;
+constexpr int kProcessWindowFindTimeoutMs = 3000;
+}
 
 static std::wstring getEnvVar(const wchar_t *name)
 {
@@ -206,7 +210,7 @@ static HWND findWindowByProcessName(const wchar_t *exeName, int timeoutMs)
     if (!exeName || timeoutMs <= 0)
         return nullptr;
 
-    const int stepMs = app_constants::kWindowFindStepMs;
+    const int stepMs = kWindowFindStepMs;
     for (int waited = 0; waited <= timeoutMs; waited += stepMs) {
         FindWindowByProcessData data;
         data.exeName = exeName;
@@ -249,8 +253,66 @@ void closeWindowByProcessAfterDelay(const wchar_t *exeName, int delayMs)
     if (delayMs > 0)
         Sleep(delayMs);
 
-    HWND hwnd = findWindowByProcessName(exeName, app_constants::kProcessWindowFindTimeoutMs);
+    HWND hwnd = findWindowByProcessName(exeName, kProcessWindowFindTimeoutMs);
     if (hwnd)
         closeWindowHandle(hwnd);
+}
+#endif
+
+#ifdef _WIN32
+namespace {
+
+bool readRegistryDword(HKEY root, const wchar_t *subKey, const wchar_t *valueName, DWORD *outValue)
+{
+    if (!subKey || !valueName || !outValue)
+        return false;
+
+    const std::array<REGSAM, 3> accessMasks = {
+        KEY_READ | KEY_WOW64_64KEY,
+        KEY_READ | KEY_WOW64_32KEY,
+        KEY_READ,
+    };
+
+    for (const REGSAM mask : accessMasks) {
+        HKEY key = nullptr;
+        const LONG rc = RegOpenKeyExW(root, subKey, 0, mask, &key);
+        if (rc != ERROR_SUCCESS)
+            continue;
+
+        DWORD data = 0;
+        DWORD type = 0;
+        DWORD size = sizeof(data);
+        const LONG queryRc = RegQueryValueExW(key, valueName, nullptr, &type, reinterpret_cast<LPBYTE>(&data), &size);
+        RegCloseKey(key);
+        if (queryRc != ERROR_SUCCESS || type != REG_DWORD)
+            continue;
+
+        *outValue = data;
+        return true;
+    }
+
+    return false;
+}
+
+}
+
+Microsoft365UpdateStatus queryMicrosoft365UpdateStatus()
+{
+    const auto exe = officeC2RClientPath();
+    if (exe.empty())
+        return Microsoft365UpdateStatus::NotInstalled;
+
+    DWORD updatesEnabled = 0;
+    if (readRegistryDword(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Office\\ClickToRun\\Configuration", L"UpdatesEnabled", &updatesEnabled) &&
+        updatesEnabled == 0) {
+        return Microsoft365UpdateStatus::Disabled;
+    }
+
+    return Microsoft365UpdateStatus::Ready;
+}
+#else
+Microsoft365UpdateStatus queryMicrosoft365UpdateStatus()
+{
+    return Microsoft365UpdateStatus::Ready;
 }
 #endif
