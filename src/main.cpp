@@ -171,15 +171,15 @@ int main(int argc, char *argv[])
     QString settingsPath = exeDir + "/settings.ini";
     SimpleSettings settings(settingsPath);
     
-    const char *kIcon1024Resource = ":/icons/assets/powerpatch_icon_1024.png";
-    const char *kIcon2048Resource = ":/icons/assets/powerpatch_icon_2048.png";
-    const char *kMasterIconResource = ":/icons/assets/powerpatch_master.png";
+    const char *kIcon1024Resource = ":/icons/assets/img/powerpatch_1024.png";
+    const char *kIcon2048Resource = ":/icons/assets/img/powerpatch_2048.png";
+    const char *kMasterIconResource = ":/icons/assets/img/powerpatch.png";
     QIcon appIcon;
     appIcon.addFile(kIcon1024Resource, QSize(1024, 1024));
     appIcon.addFile(kIcon2048Resource, QSize(2048, 2048));
     if (appIcon.isNull()) {
-        appIcon.addFile("assets/powerpatch_icon_1024.png", QSize(1024, 1024));
-        appIcon.addFile("assets/powerpatch_icon_2048.png", QSize(2048, 2048));
+        appIcon.addFile("assets/img/powerpatch_1024.png", QSize(1024, 1024));
+        appIcon.addFile("assets/img/powerpatch_2048.png", QSize(2048, 2048));
     }
     app.setWindowIcon(appIcon);
 
@@ -228,10 +228,10 @@ int main(int argc, char *argv[])
         appIconPixmap.load(kIcon1024Resource);
     }
     if (appIconPixmap.isNull()) {
-        appIconPixmap.load("assets/powerpatch_master.png");
+        appIconPixmap.load("assets/img/powerpatch.png");
     }
     if (appIconPixmap.isNull()) {
-        appIconPixmap.load("assets/powerpatch_icon_1024.png");
+        appIconPixmap.load("assets/img/powerpatch_1024.png");
     }
     window.setWindowIcon(appIcon);
 

@@ -22,9 +22,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE src)
 qt_add_resources(${PROJECT_NAME} app_resources
     PREFIX "/icons"
     FILES
-        assets/powerpatch_icon_1024.png
-        assets/powerpatch_icon_2048.png
-        assets/powerpatch_master.png
+        assets/img/powerpatch_1024.png
+        assets/img/powerpatch_2048.png
+        assets/img/powerpatch.png
 )
 
 if (WIN32)
