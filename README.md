@@ -9,7 +9,7 @@
 A small **native Windows desktop app** that kicks off updates for the **three big buckets** in one place:
 
 - **Windows OS** (opens Windows Update + triggers a scan when available)
-- **Microsoft Store apps** (opens the Store Library and attempts to press **Check for updates** automatically)
+- **Microsoft Store apps** (opens Library and auto-clicks **Check for updates**)
 - **Microsoft 365** (launches OfficeC2RClient update)
 
 ---
@@ -34,10 +34,10 @@ Keeping a Windows PC current often means bouncing between Settings, the Store, a
 ## Quick start
 
 1. Launch Power Patch
-2. **Select which updates to run**: Check or uncheck the boxes next to each update type (Windows, Microsoft Store, Microsoft 365)
-3. Click **Run selected updates** to trigger all checked updates at once, or use individual buttons to run specific updates
+2. **Select which updates to run**: Check or uncheck each update type
+3. Click **Run selected updates** to run all checked updates, or use individual buttons
 4. Optional settings:
-   - **Close update windows after starting updates** - Automatically closes the update windows after initiating the scan/update
+   - **Close update windows after starting updates** - Auto-closes update windows after initiating
    - **Send app to system tray when closed** - Keeps the app running in the system tray instead of fully closing
 
 ## Notes
