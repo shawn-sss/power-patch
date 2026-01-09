@@ -8,9 +8,9 @@
 
 A small **native Windows desktop app** that kicks off updates for the **three big buckets** in one place:
 
-- **Windows OS** (opens Windows Update + triggers a scan when available)
-- **Microsoft Store apps** (opens Library and auto-clicks **Check for updates**)
-- **Microsoft 365** (launches OfficeC2RClient update)
+- **Windows OS** (opens Windows Update + triggers a scan when available).
+- **Microsoft Store apps** (opens Library and auto-clicks **Check for updates**).
+- **Microsoft 365** (launches OfficeC2RClient update).
 
 ---
 
@@ -21,24 +21,26 @@ Keeping a Windows PC current often means bouncing between Settings, the Store, a
 
 ## Requirements
 
-- **Tested on Windows 11 25H2**
-- **Microsoft Store** installed/enabled (for Store app updates)
-- **Microsoft 365 Apps / Office Click-to-Run** install (for M365 updates)
+- **Tested on Windows 11 25H2.**
+- **Microsoft Store** installed/enabled (for Store app updates).
+- **Microsoft 365 Apps / Office Click-to-Run** install (for M365 updates).
 
 ### Building from source
 
+- Includes convenient dev scripts
 - **Visual Studio + MSVC**
 - **CMake**
 - **Qt 6**
 
 ## Quick start
 
-1. Launch Power Patch
-2. **Select which updates to run**: Check or uncheck each update type
-3. Click **Run selected updates** to run all checked updates, or use individual buttons
-4. Optional settings:
-   - **Close update windows after starting updates** - Auto-closes update windows after initiating
-   - **Send app to system tray when closed** - Keeps the app running in the system tray instead of fully closing
+1. Launch Power Patch.
+2. If Windows shows a SmartScreen warning, choose **More info** → **Run anyway**.
+3. **Select which updates to run**: Check or uncheck each update type.
+4. Click **Run selected updates** to run all checked updates, or use individual buttons.
+5. Optional settings:
+   - **Close update windows after starting updates** - Auto-closes update windows after initiating.
+   - **Send app to system tray when closed** - Keeps the app running in the system tray instead of fully closing.
 
 ## Notes
 
