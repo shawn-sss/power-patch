@@ -5,9 +5,9 @@
     #define NOMINMAX
   #endif
   #include <windows.h>
-  #include <cstdint>
+  #include <UIAutomation.h>
+  #include <oleauto.h>
   #include <cwctype>
-  #include <iterator>
   #include <string>
   #include <vector>
   #include <array>
@@ -15,6 +15,10 @@
 namespace {
 constexpr int kWindowFindStepMs = 250;
 constexpr int kProcessWindowFindTimeoutMs = 3000;
+constexpr int kOfficeWindowFindTimeoutMs = 10000;
+constexpr int kOfficePollSleepMs = 500;
+constexpr int kOfficeNoProgressGraceMs = 3000;
+constexpr int kOfficeMaxWaitMs = 30 * 60 * 1000;
 }
 
 static std::wstring getEnvVar(const wchar_t *name)
@@ -231,6 +235,87 @@ static void closeWindowHandle(HWND hwnd)
     PostMessageW(hwnd, WM_CLOSE, 0, 0);
 }
 
+static bool hasOfficeUpdateProgress(IUIAutomation *automation, IUIAutomationElement *root)
+{
+    if (!automation || !root)
+        return false;
+
+    VARIANT vType;
+    VariantInit(&vType);
+    vType.vt = VT_I4;
+    vType.lVal = UIA_ProgressBarControlTypeId;
+
+    IUIAutomationCondition *cond = nullptr;
+    if (FAILED(automation->CreatePropertyCondition(UIA_ControlTypePropertyId, vType, &cond)))
+        return false;
+
+    IUIAutomationElement *progress = nullptr;
+    const HRESULT hrFind = root->FindFirst(TreeScope_Subtree, cond, &progress);
+    cond->Release();
+    if (FAILED(hrFind) || !progress)
+        return false;
+
+    progress->Release();
+    return true;
+}
+
+static bool waitForOfficeUpdateCompletion()
+{
+    HWND hwnd = findWindowByProcessName(L"OfficeC2RClient.exe", kOfficeWindowFindTimeoutMs);
+    if (!hwnd)
+        return false;
+
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool didInit = SUCCEEDED(hr);
+    if (hr == RPC_E_CHANGED_MODE)
+        ;
+    else if (FAILED(hr))
+        return false;
+
+    IUIAutomation *automation = nullptr;
+    hr = CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&automation));
+    if (FAILED(hr) || !automation) {
+        if (didInit) CoUninitialize();
+        return false;
+    }
+
+    int noProgressMs = 0;
+    const DWORD startTick = GetTickCount();
+    while (GetTickCount() - startTick < static_cast<DWORD>(kOfficeMaxWaitMs)) {
+        if (!IsWindow(hwnd)) {
+            automation->Release();
+            if (didInit) CoUninitialize();
+            return true;
+        }
+
+        IUIAutomationElement *windowEl = nullptr;
+        hr = automation->ElementFromHandle(hwnd, &windowEl);
+        if (FAILED(hr) || !windowEl) {
+            Sleep(kOfficePollSleepMs);
+            continue;
+        }
+
+        const bool hasProgress = hasOfficeUpdateProgress(automation, windowEl);
+        windowEl->Release();
+        if (hasProgress) {
+            noProgressMs = 0;
+        } else {
+            noProgressMs += kOfficePollSleepMs;
+            if (noProgressMs >= kOfficeNoProgressGraceMs) {
+                automation->Release();
+                if (didInit) CoUninitialize();
+                return true;
+            }
+        }
+
+        Sleep(kOfficePollSleepMs);
+    }
+
+    automation->Release();
+    if (didInit) CoUninitialize();
+    return false;
+}
+
 bool startMicrosoft365Update()
 {
     const auto exe = officeC2RClientPath();
@@ -244,6 +329,19 @@ bool startMicrosoft365Update()
         return true;
 
     return false;
+}
+
+bool closeMicrosoft365UpdateAfterCompletion(int waitAfterMs)
+{
+    const bool finished = waitForOfficeUpdateCompletion();
+    if (!finished)
+        return false;
+
+    if (waitAfterMs > 0)
+        Sleep(waitAfterMs);
+
+    closeWindowByProcessAfterDelay(L"OfficeC2RClient.exe", 0);
+    return true;
 }
 
 void closeWindowByProcessAfterDelay(const wchar_t *exeName, int delayMs)

@@ -23,7 +23,6 @@
 #include <QAbstractButton>
 #include <QFile>
 #include <QTextStream>
-#include <QDir>
 #include <thread>
 
 #include "m365_update/m365_update.h"
@@ -197,7 +196,8 @@ private:
 
 namespace {
 constexpr int kReenableButtonsDelayMs = 1200;
-constexpr int kWaitBeforeCloseMs = 10000;
+constexpr int kWaitBeforeWindowsScanMs = 5000;
+constexpr int kWaitBeforeCloseMs = 5000;
 }
 
 int main(int argc, char *argv[])
@@ -505,42 +505,55 @@ int main(int argc, char *argv[])
                 "Power Patch",
                 "Windows Update is disabled by the service or policy on this device.\n"
                 "Enable Windows Update before trying again.");
+            QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
+                updateButtonStates();
+                statusLabel->setText("Ready");
+            });
         } else {
             statusLabel->setText("Checking Windows updates...");
             const bool closeAfter = closeUpdateWindowsCheck->isChecked();
-            const bool scanOk = startWindowsUpdateScan();
-            const bool uiOk = openWindowsUpdateSettings();
+            std::thread([windowPtr, statusLabel, updateButtonStates, closeAfter] {
+                const bool uiOk = openWindowsUpdateSettings();
+                if (uiOk) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeWindowsScanMs));
+                }
+                const bool scanOk = startWindowsUpdateScan();
 
-            if (closeAfter && uiOk) {
-                std::thread([] {
+                if (closeAfter && uiOk) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeCloseMs));
                     closeWindowsUpdateWindowAfterDelay(0);
-                }).detach();
-            }
+                }
 
-            if (!scanOk && !uiOk) {
-                QMessageBox::warning(
-                    windowPtr,
-                    "Power Patch",
-                    "Couldn't start a Windows Update scan or open the Windows Update settings page.\n"
-                    "This feature requires Windows 11 (or later) and access to the Settings app.");
-            } else if (!scanOk && uiOk) {
-                QMessageBox::information(
-                    windowPtr,
-                    "Power Patch",
-                    "Windows Update opened, but the scan trigger wasn't available.\n"
-                    "If it doesn't automatically start scanning, click \"Check for updates\" in the Settings window.");
-            }
+                QMetaObject::invokeMethod(windowPtr, [windowPtr, statusLabel, updateButtonStates, scanOk, uiOk] {
+                    if (!scanOk && !uiOk) {
+                        QMessageBox::warning(
+                            windowPtr,
+                            "Power Patch",
+                            "Couldn't start a Windows Update scan or open the Windows Update settings page.\n"
+                            "This feature requires Windows 11 (or later) and access to the Settings app.");
+                    } else if (!scanOk && uiOk) {
+                        QMessageBox::information(
+                            windowPtr,
+                            "Power Patch",
+                            "Windows Update opened, but the scan trigger wasn't available.\n"
+                            "If it doesn't automatically start scanning, click \"Check for updates\" in the Settings window.");
+                    }
+
+                    QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
+                        updateButtonStates();
+                        statusLabel->setText("Ready");
+                    });
+                }, Qt::QueuedConnection);
+            }).detach();
         }
 #else
         statusLabel->setText("Unsupported platform");
         QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows.");
-#endif
-
         QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
             updateButtonStates();
             statusLabel->setText("Ready");
         });
+#endif
     });
 
     QObject::connect(m365UpdateButton, &QPushButton::clicked, [&] {
@@ -578,8 +591,7 @@ int main(int argc, char *argv[])
 
             if (closeAfter && ok) {
                 std::thread([] {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeCloseMs));
-                    closeWindowByProcessAfterDelay(L"OfficeC2RClient.exe", 0);
+                    closeMicrosoft365UpdateAfterCompletion(kWaitBeforeCloseMs);
                 }).detach();
             }
         }
@@ -635,8 +647,8 @@ int main(int argc, char *argv[])
                         QMessageBox::information(
                             windowPtr,
                             "Power Patch",
-                            "Microsoft Store opened, but the app couldn't automatically click the \"Get updates\" button.\n"
-                            "If updates don't start automatically, click \"Get updates\" in the Store Library.");
+                            "Microsoft Store opened, but the app couldn't automatically click \"Check for updates\" or \"Update\".\n"
+                            "If updates don't start automatically, click \"Check for updates\" in the Store Library.");
                     }
 
                     QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
@@ -790,8 +802,11 @@ int main(int argc, char *argv[])
                 QMetaObject::invokeMethod(windowPtr, [statusLabel] {
                     statusLabel->setText("Starting Windows Update...");
                 }, Qt::QueuedConnection);
-                winScanOk = startWindowsUpdateScan();
                 winUiOk = openWindowsUpdateSettings();
+                if (winUiOk) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeWindowsScanMs));
+                }
+                winScanOk = startWindowsUpdateScan();
                 if (closeAfter && winUiOk) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeCloseMs));
                     closeWindowsUpdateWindowAfterDelay(0);
@@ -813,8 +828,7 @@ int main(int argc, char *argv[])
                 }, Qt::QueuedConnection);
                 officeOk = startMicrosoft365Update();
                 if (closeAfter && officeOk) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeCloseMs));
-                    closeWindowByProcessAfterDelay(L"OfficeC2RClient.exe", 0);
+                    closeMicrosoft365UpdateAfterCompletion(kWaitBeforeCloseMs);
                 }
             }
 
@@ -847,8 +861,8 @@ int main(int argc, char *argv[])
                         QMessageBox::information(
                             windowPtr,
                             "Power Patch",
-                                    "Microsoft Store opened, but the app couldn't automatically click the \"Get updates\" button.\n"
-                                    "If updates don't start automatically, click \"Get updates\" in the Store Library.");
+                                    "Microsoft Store opened, but the app couldn't automatically click \"Check for updates\" or \"Update\".\n"
+                                    "If updates don't start automatically, click \"Check for updates\" in the Store Library.");
                     }
                 }
 
@@ -860,14 +874,6 @@ int main(int argc, char *argv[])
                         "This requires a local Microsoft 365 Apps / Office Click-to-Run install.\n"
                         "If you're using a different Office installation type, update it via its own updater or management tooling.");
                 }
-
-                bool allOk = true;
-                if (winEnabled && !(winScanOk || winUiOk))
-                    allOk = false;
-                if (storeEnabled && !storeOpened)
-                    allOk = false;
-                if (m365Enabled && !officeOk)
-                    allOk = false;
 
                 QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
                     updateButtonStates();

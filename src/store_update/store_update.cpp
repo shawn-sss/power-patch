@@ -10,7 +10,6 @@
   #include <oleauto.h>
   #include <cstdint>
   #include <cwctype>
-  #include <iterator>
   #include <string>
   #include <vector>
   #include <array>
@@ -20,7 +19,9 @@ constexpr int kWindowFindStepMs = 250;
 constexpr int kStoreFindTimeoutMs = 3000;
 constexpr int kStoreButtonPollCount = 30;
 constexpr int kStoreButtonPollSleepMs = 400;
-constexpr int kWaitBeforeCloseMs = 10000;
+constexpr int kStoreInitialWaitMs = 5000;
+constexpr int kStorePostCheckWaitMs = 5000;
+constexpr int kStoreCloseWaitMs = 5000;
 }
 
 static bool wcontains_insensitive(std::wstring haystack, std::wstring needle)
@@ -166,30 +167,44 @@ static bool tryInvokeButtonByName(IUIAutomation *automation, IUIAutomationElemen
     return SUCCEEDED(hrInvoke);
 }
 
-static bool isStoreUpdateButtonName(const std::wstring &name)
+static std::wstring toLowerCopy(const std::wstring &input)
 {
-    auto lower = name;
-    for (auto &ch : lower) {
+    std::wstring out = input;
+    for (auto &ch : out) {
         ch = static_cast<wchar_t>(towlower(ch));
     }
-
-    if (lower.find(L"get updates") != std::wstring::npos)
-        return true;
-    if (lower.find(L"update all") != std::wstring::npos)
-        return true;
-    if (lower.find(L"check for updates") != std::wstring::npos)
-        return true;
-    if (lower.find(L"check for update") != std::wstring::npos)
-        return true;
-
-    const bool hasUpdate = (lower.find(L"update") != std::wstring::npos) || (lower.find(L"updates") != std::wstring::npos);
-    const bool hasGet = (lower.find(L"get") != std::wstring::npos);
-    const bool hasAll = (lower.find(L"all") != std::wstring::npos);
-    const bool hasCheck = (lower.find(L"check") != std::wstring::npos);
-    return hasUpdate && (hasGet || hasAll || hasCheck);
+    return out;
 }
 
-static bool tryInvokeAnyUpdateButton(IUIAutomation *automation, IUIAutomationElement *root)
+static bool tryInvokeCheckForUpdatesButton(IUIAutomation *automation, IUIAutomationElement *root)
+{
+    const std::vector<const wchar_t *> candidates = {
+        L"Check for updates",
+        L"Check for update",
+        L"Get updates",
+        L"Get Updates",
+    };
+
+    for (auto *label : candidates) {
+        if (tryInvokeButtonByName(automation, root, label))
+            return true;
+    }
+    return false;
+}
+
+static bool isStoreUpdateAllButtonName(const std::wstring &name)
+{
+    auto lower = toLowerCopy(name);
+    return lower.find(L"update all") != std::wstring::npos;
+}
+
+static bool isStoreUpdateSingleButtonName(const std::wstring &name)
+{
+    auto lower = toLowerCopy(name);
+    return lower == L"update";
+}
+
+static bool tryInvokeStoreUpdateActions(IUIAutomation *automation, IUIAutomationElement *root)
 {
     if (!automation || !root)
         return false;
@@ -209,6 +224,7 @@ static bool tryInvokeAnyUpdateButton(IUIAutomation *automation, IUIAutomationEle
     if (FAILED(hr) || !buttons)
         return false;
 
+    bool clicked = false;
     int length = 0;
     buttons->get_Length(&length);
     for (int i = 0; i < length; ++i) {
@@ -221,7 +237,7 @@ static bool tryInvokeAnyUpdateButton(IUIAutomation *automation, IUIAutomationEle
             std::wstring name(nameBstr, SysStringLen(nameBstr));
             SysFreeString(nameBstr);
 
-            if (isStoreUpdateButtonName(name)) {
+            if (isStoreUpdateAllButtonName(name)) {
                 IUIAutomationInvokePattern *invoke = nullptr;
                 const HRESULT hrPat = btn->GetCurrentPatternAs(UIA_InvokePatternId, IID_PPV_ARGS(&invoke));
                 btn->Release();
@@ -240,8 +256,37 @@ static bool tryInvokeAnyUpdateButton(IUIAutomation *automation, IUIAutomationEle
         btn->Release();
     }
 
+    for (int i = 0; i < length; ++i) {
+        IUIAutomationElement *btn = nullptr;
+        if (FAILED(buttons->GetElement(i, &btn)) || !btn)
+            continue;
+
+        BSTR nameBstr = nullptr;
+        if (SUCCEEDED(btn->get_CurrentName(&nameBstr)) && nameBstr) {
+            std::wstring name(nameBstr, SysStringLen(nameBstr));
+            SysFreeString(nameBstr);
+
+            if (isStoreUpdateSingleButtonName(name)) {
+                IUIAutomationInvokePattern *invoke = nullptr;
+                const HRESULT hrPat = btn->GetCurrentPatternAs(UIA_InvokePatternId, IID_PPV_ARGS(&invoke));
+                btn->Release();
+                if (SUCCEEDED(hrPat) && invoke) {
+                    const HRESULT hrInvoke = invoke->Invoke();
+                    invoke->Release();
+                    if (SUCCEEDED(hrInvoke)) {
+                        clicked = true;
+                        continue;
+                    }
+                }
+                continue;
+            }
+        }
+
+        btn->Release();
+    }
+
     buttons->Release();
-    return false;
+    return clicked;
 }
 
 bool openMicrosoftStoreLibrary()
@@ -267,6 +312,8 @@ bool clickMicrosoftStoreGetUpdates(bool closeAfter)
     if (!storeHwnd)
         return false;
 
+    Sleep(kStoreInitialWaitMs);
+
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     const bool didInit = SUCCEEDED(hr);
     if (hr == RPC_E_CHANGED_MODE)
@@ -289,38 +336,31 @@ bool clickMicrosoftStoreGetUpdates(bool closeAfter)
         return false;
     }
 
-    const std::vector<const wchar_t *> candidates = {
-        L"Get updates",
-        L"Update all",
-        L"Get Updates",
-        L"Update All",
-        L"Check for updates",
-        L"Check for update",
-    };
-
-    bool ok = false;
-    for (int i = 0; i < kStoreButtonPollCount && !ok; ++i) {
-        for (auto *label : candidates) {
-            if (tryInvokeButtonByName(automation, windowEl, label)) {
-                ok = true;
-                break;
-            }
-        }
-        if (!ok)
-            ok = tryInvokeAnyUpdateButton(automation, windowEl);
-        if (!ok)
+    bool clickedCheck = false;
+    for (int i = 0; i < kStoreButtonPollCount && !clickedCheck; ++i) {
+        clickedCheck = tryInvokeCheckForUpdatesButton(automation, windowEl);
+        if (!clickedCheck)
             Sleep(kStoreButtonPollSleepMs);
     }
 
-    if (ok && closeAfter) {
-        Sleep(kWaitBeforeCloseMs);
+    Sleep(kStorePostCheckWaitMs);
+
+    bool clickedUpdates = false;
+    for (int i = 0; i < kStoreButtonPollCount && !clickedUpdates; ++i) {
+        clickedUpdates = tryInvokeStoreUpdateActions(automation, windowEl);
+        if (!clickedUpdates)
+            Sleep(kStoreButtonPollSleepMs);
+    }
+
+    if (closeAfter) {
+        Sleep(kStoreCloseWaitMs);
         closeWindowHandle(storeHwnd);
     }
 
     windowEl->Release();
     automation->Release();
     if (didInit) CoUninitialize();
-    return ok;
+    return clickedCheck || clickedUpdates;
 }
 #ifdef _WIN32
 namespace {
