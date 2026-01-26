@@ -337,13 +337,13 @@ int main(int argc, char *argv[])
         auto *trayMenu = new QMenu(&window);
         if (darkMode) {
             trayMenu->setStyleSheet(
-                "QMenu { min-width: 180px; background-color: #242a31; border: 1px solid #3a424c; border-radius: 8px; }"
+                "QMenu { background-color: #242a31; border: 1px solid #3a424c; border-radius: 8px; }"
                 "QMenu::item { padding: 6px 18px; border-radius: 4px; }"
                 "QMenu::item:selected { background-color: #2f3741; }"
                 "QMenu::separator { height: 1px; background: #3a424c; margin: 4px 6px; }");
         } else {
             trayMenu->setStyleSheet(
-                "QMenu { min-width: 180px; background-color: #ffffff; border: 1px solid #d0d6dd; border-radius: 8px; }"
+                "QMenu { background-color: #ffffff; border: 1px solid #d0d6dd; border-radius: 8px; }"
                 "QMenu::item { padding: 6px 18px; border-radius: 4px; }"
                 "QMenu::item:selected { background-color: #eef1f4; }"
                 "QMenu::separator { height: 1px; background: #d0d6dd; margin: 4px 6px; }");
@@ -351,6 +351,19 @@ int main(int argc, char *argv[])
         auto *openAction = trayMenu->addAction("Open");
         auto *runAllAction = trayMenu->addAction("Run");
         auto *exitAction = trayMenu->addAction("Exit");
+
+        trayMenu->ensurePolished();
+        QFontMetrics fm(trayMenu->font());
+        int maxTextWidth = 0;
+        const QList<QAction*> actions = trayMenu->actions();
+        for (QAction *a : actions) {
+            if (!a) continue;
+            const int w = fm.horizontalAdvance(a->text());
+            if (w > maxTextWidth) maxTextWidth = w;
+        }
+        const int horizPadding = 18 * 2;
+        const int extra = 12;
+        trayMenu->setFixedWidth(maxTextWidth + horizPadding + extra);
 
         QObject::connect(openAction, &QAction::triggered, [&] {
             window.show();
