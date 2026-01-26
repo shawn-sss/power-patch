@@ -23,7 +23,9 @@
 #include <QAbstractButton>
 #include <QFile>
 #include <QTextStream>
-#include <thread>
+#include <QPointer>
+#include <QThread>
+#include <QtConcurrent/QtConcurrent>
 
 #include "m365_update/m365_update.h"
 #include "store_update/store_update.h"
@@ -79,19 +81,19 @@ class TrayCloseFilter : public QObject
 {
 public:
     TrayCloseFilter(QWidget *window,
-                    const QCheckBox *trayOnCloseCheck,
-                    bool *allowQuit,
-                    QSystemTrayIcon *trayIcon,
-                    QApplication *app,
-                    QObject *parent = nullptr)
-        : QObject(parent),
-          window_(window),
-          trayOnCloseCheck_(trayOnCloseCheck),
-          allowQuit_(allowQuit),
-          trayIcon_(trayIcon),
-          app_(app)
-    {
-    }
+                                        const QCheckBox *trayOnCloseCheck,
+                                        bool *allowQuit,
+                                        QSystemTrayIcon *trayIcon,
+                                        QApplication *app,
+                                        QObject *parent = nullptr)
+                : QObject(parent),
+                    window_(window),
+                    trayOnCloseCheck_(const_cast<QCheckBox *>(trayOnCloseCheck)),
+                    allowQuit_(allowQuit),
+                    trayIcon_(trayIcon),
+                    app_(app)
+        {
+        }
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override
@@ -100,7 +102,8 @@ protected:
             if (allowQuit_ && *allowQuit_)
                 return QObject::eventFilter(obj, event);
             if (trayOnCloseCheck_ && trayOnCloseCheck_->isChecked()) {
-                window_->hide();
+                if (window_)
+                    window_->hide();
                 event->ignore();
                 return true;
             }
@@ -116,11 +119,11 @@ protected:
     }
 
 private:
-    QWidget *window_;
-    const QCheckBox *trayOnCloseCheck_;
+    QPointer<QWidget> window_;
+    QPointer<QCheckBox> trayOnCloseCheck_;
     bool *allowQuit_;
-    QSystemTrayIcon *trayIcon_;
-    QApplication *app_;
+    QPointer<QSystemTrayIcon> trayIcon_;
+    QPointer<QApplication> app_;
 };
 
 class TrayMenuLeaveFilter : public QObject
@@ -134,7 +137,7 @@ protected:
     {
         if (obj == menu_) {
             if (event->type() == QEvent::Leave) {
-                if (menu_->isVisible())
+                if (menu_ && menu_->isVisible())
                     menu_->close();
             }
         }
@@ -142,7 +145,7 @@ protected:
     }
 
 private:
-    QMenu *menu_;
+    QPointer<QMenu> menu_;
 };
 
 class TrayMenuAutoDismissController : public QObject
@@ -165,7 +168,7 @@ public:
     }
 
 private:
-    QMenu *menu_;
+    QPointer<QMenu> menu_;
     QTimer *timer_;
     QPoint iconPos_;
     int iconRadius_;
@@ -207,9 +210,9 @@ int main(int argc, char *argv[])
     app.setApplicationDisplayName("Power Patch");
     app.setOrganizationName("Power Patch");
     
-    QString exeDir = QCoreApplication::applicationDirPath();
-    
-    bool isDeployed = exeDir.contains("AppData", Qt::CaseInsensitive);
+    const QString exeDir = QCoreApplication::applicationDirPath();
+
+    const bool isDeployed = exeDir.contains("AppData", Qt::CaseInsensitive);
     
     if (isDeployed) {
         QStringList criticalFiles = {
@@ -239,7 +242,7 @@ int main(int argc, char *argv[])
         }
     }
     
-    QString settingsPath = exeDir + "/settings.ini";
+    const QString settingsPath = exeDir + "/settings.ini";
     SimpleSettings settings(settingsPath);
     
     const char *kIcon1024Resource = ":/icons/assets/img/powerpatch_1024.png";
@@ -512,15 +515,15 @@ int main(int argc, char *argv[])
         } else {
             statusLabel->setText("Checking Windows updates...");
             const bool closeAfter = closeUpdateWindowsCheck->isChecked();
-            std::thread([windowPtr, statusLabel, updateButtonStates, closeAfter] {
+            (void)QtConcurrent::run([windowPtr, statusLabel, updateButtonStates, closeAfter] {
                 const bool uiOk = openWindowsUpdateSettings();
                 if (uiOk) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeWindowsScanMs));
+                    QThread::msleep(static_cast<unsigned long>(kWaitBeforeWindowsScanMs));
                 }
                 const bool scanOk = startWindowsUpdateScan();
 
                 if (closeAfter && uiOk) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeCloseMs));
+                    QThread::msleep(static_cast<unsigned long>(kWaitBeforeCloseMs));
                     closeWindowsUpdateWindowAfterDelay(0);
                 }
 
@@ -544,7 +547,7 @@ int main(int argc, char *argv[])
                         statusLabel->setText("Ready");
                     });
                 }, Qt::QueuedConnection);
-            }).detach();
+            });
         }
 #else
         statusLabel->setText("Unsupported platform");
@@ -589,11 +592,11 @@ int main(int argc, char *argv[])
                     "If you're using a different Office installation type, update it via its own updater or management tooling.");
             }
 
-            if (closeAfter && ok) {
-                std::thread([] {
-                    closeMicrosoft365UpdateAfterCompletion(kWaitBeforeCloseMs);
-                }).detach();
-            }
+                if (closeAfter && ok) {
+                    (void)QtConcurrent::run([] {
+                        closeMicrosoft365UpdateAfterCompletion(kWaitBeforeCloseMs);
+                    });
+                }
         }
 #else
         statusLabel->setText("Unsupported platform");
@@ -629,7 +632,7 @@ int main(int argc, char *argv[])
         } else {
             statusLabel->setText("Checking Microsoft Store app updates...");
             const bool closeAfter = closeUpdateWindowsCheck->isChecked();
-            std::thread([windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton, closeAfter, updateButtonStates] {
+            (void)QtConcurrent::run([windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton, closeAfter, updateButtonStates] {
                 const bool opened = openMicrosoftStoreLibrary();
                 bool clicked = false;
                 if (opened)
@@ -657,7 +660,7 @@ int main(int argc, char *argv[])
                     });
                 },
                                          Qt::QueuedConnection);
-            }).detach();
+            });
         }
 #else
         statusLabel->setText("Unsupported platform");
@@ -791,7 +794,7 @@ int main(int argc, char *argv[])
         }
 
         const bool closeAfter = closeUpdateWindowsCheck->isChecked();
-        std::thread([windowPtr, statusLabel, closeAfter, winEnabled, storeEnabled, m365Enabled, updateButtonStates] {
+        (void)QtConcurrent::run([windowPtr, statusLabel, closeAfter, winEnabled, storeEnabled, m365Enabled, updateButtonStates] {
             bool winScanOk = false;
             bool winUiOk = false;
             bool storeOpened = false;
@@ -804,11 +807,11 @@ int main(int argc, char *argv[])
                 }, Qt::QueuedConnection);
                 winUiOk = openWindowsUpdateSettings();
                 if (winUiOk) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeWindowsScanMs));
+                    QThread::msleep(static_cast<unsigned long>(kWaitBeforeWindowsScanMs));
                 }
                 winScanOk = startWindowsUpdateScan();
                 if (closeAfter && winUiOk) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(kWaitBeforeCloseMs));
+                    QThread::msleep(static_cast<unsigned long>(kWaitBeforeCloseMs));
                     closeWindowsUpdateWindowAfterDelay(0);
                 }
             }
@@ -880,7 +883,7 @@ int main(int argc, char *argv[])
                     statusLabel->setText("Ready");
                 });
             }, Qt::QueuedConnection);
-        }).detach();
+        });
 #else
         statusLabel->setText("Unsupported platform");
         QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows.");
