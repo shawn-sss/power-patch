@@ -1,7 +1,5 @@
 # Power Patch
 
-**Version 1.0**
-
 <p align="center">
     <img src="screenshot.jpg" alt="Screenshot">
 </p>
