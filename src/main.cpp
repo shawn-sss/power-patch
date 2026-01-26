@@ -124,6 +124,77 @@ private:
     QApplication *app_;
 };
 
+class TrayMenuLeaveFilter : public QObject
+{
+public:
+    explicit TrayMenuLeaveFilter(QMenu *menu, QObject *parent = nullptr)
+        : QObject(parent), menu_(menu) {}
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override
+    {
+        if (obj == menu_) {
+            if (event->type() == QEvent::Leave) {
+                if (menu_->isVisible())
+                    menu_->close();
+            }
+        }
+        return QObject::eventFilter(obj, event);
+    }
+
+private:
+    QMenu *menu_;
+};
+
+class TrayMenuAutoDismissController : public QObject
+{
+public:
+    explicit TrayMenuAutoDismissController(QMenu *menu, QObject *parent = nullptr)
+        : QObject(parent), menu_(menu), timer_(new QTimer(this)), iconRadius_(48)
+    {
+        timer_->setInterval(150);
+        connect(timer_, &QTimer::timeout, this, &TrayMenuAutoDismissController::checkMouse);
+
+        connect(menu_, &QMenu::aboutToShow, this, [this]() {
+            iconPos_ = QCursor::pos();
+            timer_->start();
+        });
+
+        connect(menu_, &QMenu::aboutToHide, this, [this]() {
+            timer_->stop();
+        });
+    }
+
+private:
+    QMenu *menu_;
+    QTimer *timer_;
+    QPoint iconPos_;
+    int iconRadius_;
+
+    void checkMouse()
+    {
+        if (!menu_ || !menu_->isVisible()) {
+            timer_->stop();
+            return;
+        }
+
+        const QPoint pos = QCursor::pos();
+
+        const QRect menuLocalRect = menu_->rect();
+        const QPoint menuTopLeft = menu_->mapToGlobal(menuLocalRect.topLeft());
+        const QRect menuGlobalRect(menuTopLeft, menuLocalRect.size());
+
+        if (menuGlobalRect.contains(pos))
+            return;
+
+        const QRect iconRect(iconPos_.x() - iconRadius_, iconPos_.y() - iconRadius_, iconRadius_ * 2, iconRadius_ * 2);
+        if (iconRect.contains(pos))
+            return;
+
+        menu_->close();
+    }
+};
+
 namespace {
 constexpr int kReenableButtonsDelayMs = 1200;
 constexpr int kWaitBeforeCloseMs = 10000;
@@ -364,6 +435,9 @@ int main(int argc, char *argv[])
         const int horizPadding = 18 * 2;
         const int extra = 12;
         trayMenu->setFixedWidth(maxTextWidth + horizPadding + extra);
+        trayMenu->installEventFilter(new TrayMenuLeaveFilter(trayMenu, trayMenu));
+
+        new TrayMenuAutoDismissController(trayMenu, trayMenu);
 
         QObject::connect(openAction, &QAction::triggered, [&] {
             window.show();
