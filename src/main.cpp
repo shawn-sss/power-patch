@@ -17,7 +17,9 @@
 #include <QEvent>
 #include <QSize>
 #include <QStyle>
+#include <QStyleOptionButton>
 #include <QCursor>
+#include <QMouseEvent>
 #include <QScreen>
 #include <QGuiApplication>
 #include <QAbstractButton>
@@ -197,6 +199,54 @@ private:
     }
 };
 
+class CheckboxHoverCursorFilter : public QObject
+{
+public:
+    explicit CheckboxHoverCursorFilter(QCheckBox *checkbox, QObject *parent = nullptr)
+        : QObject(parent), checkbox_(checkbox)
+    {
+        if (checkbox_) {
+            checkbox_->setMouseTracking(true);
+        }
+    }
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override
+    {
+        if (obj != checkbox_ || !checkbox_)
+            return QObject::eventFilter(obj, event);
+
+        if (event->type() == QEvent::Leave) {
+            checkbox_->unsetCursor();
+            return QObject::eventFilter(obj, event);
+        }
+
+        if (event->type() == QEvent::MouseMove) {
+            auto *mouseEvent = static_cast<QMouseEvent *>(event);
+            QStyleOptionButton opt;
+            opt.initFrom(checkbox_);
+            opt.text = checkbox_->text();
+            const QRect indicator = checkbox_->style()->subElementRect(QStyle::SE_CheckBoxIndicator, &opt, checkbox_);
+            const int spacing = checkbox_->style()->pixelMetric(QStyle::PM_CheckBoxLabelSpacing, &opt, checkbox_);
+            QFontMetrics fm(checkbox_->font());
+            const QSize textSize = fm.size(Qt::TextSingleLine, checkbox_->text());
+            const int textX = indicator.right() + spacing + 1;
+            const int textY = (checkbox_->height() - textSize.height()) / 2;
+            const QRect textRect(QPoint(textX, textY), textSize);
+            if (indicator.contains(mouseEvent->pos()) || textRect.contains(mouseEvent->pos())) {
+                checkbox_->setCursor(Qt::PointingHandCursor);
+            } else {
+                checkbox_->unsetCursor();
+            }
+        }
+
+        return QObject::eventFilter(obj, event);
+    }
+
+private:
+    QPointer<QCheckBox> checkbox_;
+};
+
 namespace {
 constexpr int kReenableButtonsDelayMs = 1200;
 constexpr int kWaitBeforeWindowsScanMs = 5000;
@@ -259,30 +309,69 @@ int main(int argc, char *argv[])
 
     QWidget window;
     window.setWindowTitle("Power Patch");
-    const bool darkMode = app.palette().color(QPalette::Window).lightness() < 128;
-    if (darkMode) {
-        window.setStyleSheet(
-            "QWidget { background-color: #1b1f24; }"
-            "QLabel { color: #e6edf3; }"
-            "QLabel#subtitleLabel { color: #9aa4b2; }"
-            "QLabel#statusLabel { color: #c1c7d0; }"
-            "QLabel#appIcon { background-color: #242a31; border: 1px solid #3a424c; border-radius: 8px; }"
-            "QPushButton { color: #e6edf3; background-color: #242a31; border: 1px solid #3a424c; border-radius: 6px; padding: 6px 10px; }"
-            "QPushButton:hover { border-color: #55606e; }"
-            "QPushButton:disabled { color: #6b7480; }"
-            "QCheckBox { color: #e6edf3; }");
-    } else {
-        window.setStyleSheet(
-            "QWidget { background-color: #f7f8fa; }"
-            "QLabel { color: #1f2328; }"
-            "QLabel#subtitleLabel { color: #5a6470; }"
-            "QLabel#statusLabel { color: #47505a; }"
-            "QLabel#appIcon { background-color: #ffffff; border: 1px solid #d0d6dd; border-radius: 8px; }"
-            "QPushButton { color: #1f2328; background-color: #ffffff; border: 1px solid #d0d6dd; border-radius: 6px; padding: 6px 10px; }"
-            "QPushButton:hover { border-color: #aeb6bf; }"
-            "QPushButton:disabled { color: #8a929b; }"
-            "QCheckBox { color: #1f2328; }");
-    }
+    window.setWindowFlag(Qt::MSWindowsFixedSizeDialogHint, true);
+    window.setWindowFlag(Qt::WindowMaximizeButtonHint, false);
+    window.setWindowFlags(window.windowFlags() & ~Qt::WindowMaximizeButtonHint);
+    auto isDarkMode = [&app] {
+        return app.palette().color(QPalette::Window).lightness() < 128;
+    };
+    auto applyTheme = [&](bool darkMode, QMenu *trayMenu, QPushButton *aboutButton) {
+        if (darkMode) {
+            window.setStyleSheet(
+                "QWidget { background-color: #1b1f24; }"
+                "QLabel { color: #e6edf3; }"
+                "QLabel#subtitleLabel { color: #9aa4b2; }"
+                "QLabel#statusLabel { color: #c1c7d0; }"
+                "QLabel#appIcon { background-color: transparent; border: none; border-radius: 8px; }"
+                "QPushButton { color: #e6edf3; background-color: #2a313b; border: 1px solid #3a4452; border-radius: 8px; padding: 7px 12px; }"
+                "QPushButton:hover { background-color: #323b46; border-color: #4a5666; }"
+                "QPushButton:pressed { background-color: #262d36; border-color: #4a5666; }"
+                "QPushButton:disabled { color: #6b7480; background-color: #232831; border-color: #323a45; }"
+                "QCheckBox { color: #e6edf3; }"
+                "QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #55606e; border-radius: 4px; background: #1f242b; }"
+                "QCheckBox::indicator:checked { border-color: #7b8796; background-color: #2e3743; image: url(:/icons/assets/img/check_dark.png); }"
+                "QCheckBox::indicator:disabled { border-color: #3a424d; background: #1c2127; }");
+            if (trayMenu) {
+                trayMenu->setStyleSheet(
+                    "QMenu { background-color: #242a31; border: 1px solid #3a424c; border-radius: 8px; }"
+                    "QMenu::item { padding: 6px 18px; border-radius: 4px; }"
+                    "QMenu::item:selected { background-color: #2f3741; }"
+                    "QMenu::separator { height: 1px; background: #3a424c; margin: 4px 6px; }");
+            }
+            if (aboutButton) {
+                aboutButton->setStyleSheet(
+                    "QPushButton { border-radius: 15px; padding: 0px; color: #e6edf3; background-color: transparent; border: none; }"
+                    "QPushButton:hover { border-color: #55606e; }");
+            }
+        } else {
+            window.setStyleSheet(
+                "QWidget { background-color: #f7f8fa; }"
+                "QLabel { color: #1f2328; }"
+                "QLabel#subtitleLabel { color: #5a6470; }"
+                "QLabel#statusLabel { color: #47505a; }"
+                "QLabel#appIcon { background-color: transparent; border: none; border-radius: 8px; }"
+                "QPushButton { color: #1f2328; background-color: #ffffff; border: 1px solid #d0d6dd; border-radius: 8px; padding: 7px 12px; }"
+                "QPushButton:hover { background-color: #f1f3f6; border-color: #b8c0c9; }"
+                "QPushButton:pressed { background-color: #e8edf2; border-color: #b8c0c9; }"
+                "QPushButton:disabled { color: #8a929b; background-color: #f4f6f8; border-color: #d9dee4; }"
+                "QCheckBox { color: #1f2328; }"
+                "QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #aeb6bf; border-radius: 4px; background: #ffffff; }"
+                "QCheckBox::indicator:checked { border-color: #7b8796; background-color: #e9edf2; image: url(:/icons/assets/img/check_light.png); }"
+                "QCheckBox::indicator:disabled { border-color: #c8cfd8; background: #f3f5f8; }");
+            if (trayMenu) {
+                trayMenu->setStyleSheet(
+                    "QMenu { background-color: #ffffff; border: 1px solid #d0d6dd; border-radius: 8px; }"
+                    "QMenu::item { padding: 6px 18px; border-radius: 4px; }"
+                    "QMenu::item:selected { background-color: #eef1f4; }"
+                    "QMenu::separator { height: 1px; background: #d0d6dd; margin: 4px 6px; }");
+            }
+            if (aboutButton) {
+                aboutButton->setStyleSheet(
+                    "QPushButton { border-radius: 15px; padding: 0px; color: #1f2328; background-color: transparent; border: none; }"
+                    "QPushButton:hover { border-color: #aeb6bf; }");
+            }
+        }
+    };
     QWidget *windowPtr = &window;
 
     auto *mainLayout = new QVBoxLayout(&window);
@@ -325,25 +414,26 @@ int main(int argc, char *argv[])
 
     auto *closeUpdateWindowsCheck = new QCheckBox("Close update windows after starting updates");
     closeUpdateWindowsCheck->setChecked(settings.value("closeUpdateWindows", false));
-    closeUpdateWindowsCheck->setCursor(Qt::PointingHandCursor);
 
     auto *trayOnCloseCheck = new QCheckBox("Send app to system tray when closed");
     trayOnCloseCheck->setChecked(settings.value("trayOnClose", false));
-    trayOnCloseCheck->setCursor(Qt::PointingHandCursor);
 
     auto *enableWindowsUpdateCheck = new QCheckBox("");
     enableWindowsUpdateCheck->setChecked(settings.value("enableWindowsUpdate", true));
-    enableWindowsUpdateCheck->setCursor(Qt::PointingHandCursor);
     enableWindowsUpdateCheck->setAccessibleName("Enable Windows Update");
 
     auto *enableStoreUpdateCheck = new QCheckBox("");
     enableStoreUpdateCheck->setChecked(settings.value("enableStoreUpdate", true));
-    enableStoreUpdateCheck->setCursor(Qt::PointingHandCursor);
     enableStoreUpdateCheck->setAccessibleName("Enable Microsoft Store updates");
 
     auto *enableM365UpdateCheck = new QCheckBox("");
     enableM365UpdateCheck->setChecked(settings.value("enableM365Update", true));
-    enableM365UpdateCheck->setCursor(Qt::PointingHandCursor);
+
+    closeUpdateWindowsCheck->installEventFilter(new CheckboxHoverCursorFilter(closeUpdateWindowsCheck, closeUpdateWindowsCheck));
+    trayOnCloseCheck->installEventFilter(new CheckboxHoverCursorFilter(trayOnCloseCheck, trayOnCloseCheck));
+    enableWindowsUpdateCheck->installEventFilter(new CheckboxHoverCursorFilter(enableWindowsUpdateCheck, enableWindowsUpdateCheck));
+    enableStoreUpdateCheck->installEventFilter(new CheckboxHoverCursorFilter(enableStoreUpdateCheck, enableStoreUpdateCheck));
+    enableM365UpdateCheck->installEventFilter(new CheckboxHoverCursorFilter(enableM365UpdateCheck, enableM365UpdateCheck));
     enableM365UpdateCheck->setAccessibleName("Enable Microsoft 365 updates");
     
     QObject::connect(closeUpdateWindowsCheck, &QCheckBox::toggled, [&settings](bool checked) {
@@ -402,26 +492,14 @@ int main(int argc, char *argv[])
     updateButtonStates();
 
     QSystemTrayIcon *trayIcon = nullptr;
+    QMenu *trayMenu = nullptr;
     bool allowQuit = false;
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         app.setQuitOnLastWindowClosed(false);
         trayIcon = new QSystemTrayIcon(appIcon, &window);
         trayIcon->setToolTip("Power Patch");
 
-        auto *trayMenu = new QMenu(&window);
-        if (darkMode) {
-            trayMenu->setStyleSheet(
-                "QMenu { background-color: #242a31; border: 1px solid #3a424c; border-radius: 8px; }"
-                "QMenu::item { padding: 6px 18px; border-radius: 4px; }"
-                "QMenu::item:selected { background-color: #2f3741; }"
-                "QMenu::separator { height: 1px; background: #3a424c; margin: 4px 6px; }");
-        } else {
-            trayMenu->setStyleSheet(
-                "QMenu { background-color: #ffffff; border: 1px solid #d0d6dd; border-radius: 8px; }"
-                "QMenu::item { padding: 6px 18px; border-radius: 4px; }"
-                "QMenu::item:selected { background-color: #eef1f4; }"
-                "QMenu::separator { height: 1px; background: #d0d6dd; margin: 4px 6px; }");
-        }
+        trayMenu = new QMenu(&window);
         auto *openAction = trayMenu->addAction("Open");
         auto *runAllAction = trayMenu->addAction("Run");
         auto *exitAction = trayMenu->addAction("Exit");
@@ -676,22 +754,18 @@ int main(int argc, char *argv[])
     aboutButton->setMinimumSize(30, 30);
     aboutButton->setIcon(window.style()->standardIcon(QStyle::SP_MessageBoxInformation));
     aboutButton->setCursor(Qt::PointingHandCursor);
-    if (darkMode) {
-        aboutButton->setStyleSheet(
-            "QPushButton { border-radius: 15px; padding: 0px; color: #e6edf3; background-color: #242a31; border: 1px solid #3a424c; }"
-            "QPushButton:hover { border-color: #55606e; }");
-    } else {
-        aboutButton->setStyleSheet(
-            "QPushButton { border-radius: 15px; padding: 0px; color: #1f2328; background-color: #ffffff; border: 1px solid #d0d6dd; }"
-            "QPushButton:hover { border-color: #aeb6bf; }");
-    }
+
+    applyTheme(isDarkMode(), trayMenu, aboutButton);
+    QObject::connect(&app, &QGuiApplication::paletteChanged, &window, [&](const QPalette &) {
+        applyTheme(isDarkMode(), trayMenu, aboutButton);
+    });
     QObject::connect(aboutButton, &QPushButton::clicked, [&] {
         QMessageBox aboutBox(&window);
         aboutBox.setWindowTitle("About Power Patch");
         const QString aboutHtml =
-            "<p><b>Power Patch v1.0</b><br/>"
+            "<p><b>Power Patch v1.1</b><br/>"
             "Quick update launcher for Windows.</p>"
-            "<p><span style='color:#7a7a7a; font-size:small;'>Tested on Windows 11 25H2</span></p>"
+            "<p><span style='color:#7a7a7a; font-size:small;'>Developed on Windows 11 25H2</span></p>"
             "<p>Windows Update: opens Settings + triggers scan.<br/>"
             "Microsoft Store: opens Library + clicks Get updates.<br/>"
             "Microsoft 365: runs OfficeC2RClient update.</p>"
@@ -914,7 +988,27 @@ int main(int argc, char *argv[])
     m365UpdateLayout->addWidget(m365UpdateButton, 1);
     mainLayout->addLayout(m365UpdateLayout);
 
-    window.resize(420, 280);
+    window.adjustSize();
+    QSize targetSize = window.sizeHint();
+    if (!targetSize.isValid())
+        targetSize = QSize(420, 280);
+    targetSize.setWidth(qMax(targetSize.width(), 500));
+    QScreen *screen = window.screen();
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (screen) {
+        const QRect bounds = screen->availableGeometry();
+        const int maxWidth = qMax(320, static_cast<int>(bounds.width() * 0.85));
+        const int maxHeight = qMax(240, static_cast<int>(bounds.height() * 0.85));
+        targetSize.setWidth(qMin(targetSize.width(), maxWidth));
+        targetSize.setHeight(qMin(targetSize.height(), maxHeight));
+    }
+    window.setFixedSize(targetSize);
+    if (screen) {
+        const QRect bounds = screen->availableGeometry();
+        const QPoint centered = bounds.center() - QPoint(targetSize.width() / 2, targetSize.height() / 2);
+        window.move(centered);
+    }
     window.show();
 
     return app.exec();

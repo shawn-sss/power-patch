@@ -67,6 +67,7 @@ Section "Install"
       ${AndIf} ${FileExists} "$INSTDIR\Qt6Gui.dll"
       ${AndIf} ${FileExists} "$INSTDIR\Qt6Widgets.dll"
       ${AndIf} ${FileExists} "$INSTDIR\platforms\qwindows.dll"
+      ${AndIf} ${FileExists} "$INSTDIR\styles\qmodernwindowsstyle.dll"
         ; Everything is good, just launch
         Goto launch_app
       ${EndIf}
@@ -75,7 +76,7 @@ Section "Install"
   
   ; Need to extract - preserve settings first
   ${If} ${FileExists} "$INSTDIR\settings.ini"
-    CopyFiles /SILENT "$INSTDIR\settings.ini" "$TEMP\PowerPatch_settings_backup.ini"
+    CopyFiles /SILENT "$INSTDIR\settings.ini" "$TEMP\powerpatch_settings_backup.ini"
   ${EndIf}
   
   ; Delete old installation
@@ -83,9 +84,9 @@ Section "Install"
   CreateDirectory "$INSTDIR"
   
   ; Restore settings
-  ${If} ${FileExists} "$TEMP\PowerPatch_settings_backup.ini"
-    CopyFiles /SILENT "$TEMP\PowerPatch_settings_backup.ini" "$INSTDIR\settings.ini"
-    Delete "$TEMP\PowerPatch_settings_backup.ini"
+  ${If} ${FileExists} "$TEMP\powerpatch_settings_backup.ini"
+    CopyFiles /SILENT "$TEMP\powerpatch_settings_backup.ini" "$INSTDIR\settings.ini"
+    Delete "$TEMP\powerpatch_settings_backup.ini"
   ${EndIf}
   
   SetOutPath "$INSTDIR"

@@ -6,7 +6,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0..\.."
 
 :fromscript
-set "PROJECT_NAME=PowerPatch"
+set "PROJECT_NAME=powerpatch"
 set "BUILD_DIR=build"
 set "DIST_DIR=dist"
 set "INSTALL_DIR=install"

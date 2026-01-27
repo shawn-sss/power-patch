@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(PowerPatch VERSION 1.0.0 LANGUAGES CXX)
+project(powerpatch VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,6 +25,8 @@ qt_add_resources(${PROJECT_NAME} app_resources
         assets/img/powerpatch_1024.png
         assets/img/powerpatch_2048.png
         assets/img/powerpatch.png
+        assets/img/check_dark.png
+        assets/img/check_light.png
 )
 
 if (WIN32)

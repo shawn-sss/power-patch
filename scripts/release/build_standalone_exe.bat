@@ -54,7 +54,7 @@ exit /b 1
 set "STANDALONE_ROOT=%~dp0"
 set "WORK_DIR=%ROOT_DIR%\%DIST_DIR%\Build Artifacts"
 set "PAYLOAD_DIR=%WORK_DIR%\payload"
-set "OUTPUT_EXE=%ROOT_DIR%\%DIST_DIR%\Portable Self-Extracting\PowerPatch.exe"
+set "OUTPUT_EXE=%ROOT_DIR%\%DIST_DIR%\Portable Self-Extracting\powerpatch.exe"
 set "TEMPLATE=%STANDALONE_ROOT%standalone.nsi.template"
 set "NSIS_SCRIPT=%WORK_DIR%\package.nsi"
 set "ICON_PATH=%ROOT_DIR%\assets\ico\powerpatch_icon.ico"
