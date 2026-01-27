@@ -610,14 +610,17 @@ int main(int argc, char *argv[])
                         QMessageBox::warning(
                             windowPtr,
                             "Power Patch",
-                            "Couldn't start a Windows Update scan or open the Windows Update settings page.\n"
-                            "This feature requires Windows 11 (or later) and access to the Settings app.");
+                            "Couldn't start a Windows Update scan.\n\n"
+                            "The Windows Update settings page didn't open.\n\n"
+                            "This feature requires Windows 11 and access to the Settings app.");
                     } else if (!scanOk && uiOk) {
                         QMessageBox::information(
                             windowPtr,
                             "Power Patch",
-                            "Windows Update opened, but the scan trigger wasn't available.\n"
-                            "If it doesn't automatically start scanning, click \"Check for updates\" in the Settings window.");
+                            "Windows Update opened.\n\n"
+                            "The scan trigger wasn't available.\n\n"
+                            "If scanning doesn't start automatically,\n\n"
+                            "click \"Check for updates\" in the Settings window.");
                     }
 
                     QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
@@ -629,7 +632,7 @@ int main(int argc, char *argv[])
         }
 #else
         statusLabel->setText("Unsupported platform");
-        QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows.");
+        QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows 11.");
         QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
             updateButtonStates();
             statusLabel->setText("Ready");
@@ -650,13 +653,15 @@ int main(int argc, char *argv[])
             QMessageBox::warning(
                 windowPtr,
                 "Power Patch",
-                "Microsoft 365 updates are disabled in the Click-to-Run configuration.\nYou must enable them before retrying.");
+                "Microsoft 365 updates are disabled in the Click-to-Run configuration.\n\n"
+                "You must enable them before retrying.");
         } else if (m365Status == Microsoft365UpdateStatus::NotInstalled) {
             statusLabel->setText("Microsoft 365 Apps not installed");
             QMessageBox::warning(
                 windowPtr,
                 "Power Patch",
-                "Microsoft 365 Apps do not appear to be installed on this machine.\nUpdates cannot run.");
+                "Microsoft 365 Apps do not appear to be installed on this machine.\n\n"
+                "Updates cannot run.");
         } else {
             statusLabel->setText("Checking Microsoft 365 updates...");
             const bool closeAfter = closeUpdateWindowsCheck->isChecked();
@@ -665,8 +670,8 @@ int main(int argc, char *argv[])
                 QMessageBox::warning(
                     windowPtr,
                     "Power Patch",
-                    "Couldn't start Microsoft 365 updates.\n"
-                    "This requires a local Microsoft 365 Apps / Office Click-to-Run install.\n"
+                    "Couldn't start Microsoft 365 updates.\n\n"
+                    "This requires a local Microsoft 365 Apps / Office Click-to-Run install.\n\n"
                     "If you're using a different Office installation type, update it via its own updater or management tooling.");
             }
 
@@ -678,7 +683,7 @@ int main(int argc, char *argv[])
         }
 #else
         statusLabel->setText("Unsupported platform");
-        QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows.");
+        QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows 11.");
 #endif
 
         QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
@@ -700,13 +705,15 @@ int main(int argc, char *argv[])
             QMessageBox::warning(
                 windowPtr,
                 "Power Patch",
-                "Microsoft Store updates are disabled by policy on this device.\nEnable the Store before retrying.");
+                "Microsoft Store updates are disabled by policy on this device.\n\n"
+                "Enable the Store before retrying.");
         } else if (storeStatus == MicrosoftStoreStatus::Uninstalled) {
             statusLabel->setText("Microsoft Store not installed");
             QMessageBox::warning(
                 windowPtr,
                 "Power Patch",
-                "Microsoft Store appears to be uninstalled on this PC.\nStore updates cannot run.");
+                "Microsoft Store appears to be uninstalled on this PC.\n\n"
+                "Store updates cannot run.");
         } else {
             statusLabel->setText("Checking Microsoft Store app updates...");
             const bool closeAfter = closeUpdateWindowsCheck->isChecked();
@@ -722,14 +729,16 @@ int main(int argc, char *argv[])
                         QMessageBox::warning(
                             windowPtr,
                             "Power Patch",
-                            "Couldn't open the Microsoft Store Library page.\n"
+                            "Couldn't open the Microsoft Store Library page.\n\n"
                             "Make sure Microsoft Store is installed and enabled on this PC.");
                     } else if (!clicked) {
                         QMessageBox::information(
                             windowPtr,
                             "Power Patch",
-                            "Microsoft Store opened, but the app couldn't automatically click \"Check for updates\" or \"Update\".\n"
-                            "If updates don't start automatically, click \"Check for updates\" in the Store Library.");
+                            "Microsoft Store opened.\n\n"
+                            "The app couldn't click \"Check for updates\" or \"Update\".\n\n"
+                            "If updates don't start automatically,\n\n"
+                            "click \"Check for updates\" in the Store Library.");
                     }
 
                     QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
@@ -742,7 +751,7 @@ int main(int argc, char *argv[])
         }
 #else
         statusLabel->setText("Unsupported platform");
-        QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows.");
+        QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows 11.");
         QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
             updateButtonStates();
             statusLabel->setText("Ready");
@@ -763,7 +772,7 @@ int main(int argc, char *argv[])
         QMessageBox aboutBox(&window);
         aboutBox.setWindowTitle("About Power Patch");
         const QString aboutHtml =
-            "<p><b>Power Patch v1.1</b><br/>"
+            "<p><b>Power Patch v1.0.1</b><br/>"
             "Quick and easy update launcher for Windows.</p>"
             "<p><span style='color:#7a7a7a; font-size:small;'>Developed on Windows 11 25H2</span></p>"
             "<p>Windows Update: opens Settings + triggers scan.<br/>"
@@ -817,7 +826,7 @@ int main(int argc, char *argv[])
                 QMessageBox::warning(
                     windowPtr,
                     "Power Patch",
-                    "Windows Update is disabled by the service or policy on this device.\n"
+                    "Windows Update is disabled by the service or policy on this device.\n\n"
                     "Enable Windows Update before trying again.");
         }
 
@@ -829,14 +838,16 @@ int main(int argc, char *argv[])
                 QMessageBox::warning(
                     windowPtr,
                     "Power Patch",
-                    "Microsoft Store updates are disabled by policy on this device.\nEnable the Store before retrying.");
+                    "Microsoft Store updates are disabled by policy on this device.\n\n"
+                    "Enable the Store before retrying.");
             } else if (storeStatus == MicrosoftStoreStatus::Uninstalled) {
                 storeEnabled = false;
                 statusLabel->setText("Microsoft Store not installed");
                 QMessageBox::warning(
                     windowPtr,
                     "Power Patch",
-                    "Microsoft Store appears to be uninstalled on this PC.\nStore updates cannot run.");
+                    "Microsoft Store appears to be uninstalled on this PC.\n\n"
+                    "Store updates cannot run.");
             }
         }
 
@@ -848,14 +859,16 @@ int main(int argc, char *argv[])
             QMessageBox::warning(
                 windowPtr,
                 "Power Patch",
-                "Microsoft 365 updates are disabled in the Click-to-Run configuration.\nYou must enable them before retrying.");
+                "Microsoft 365 updates are disabled in the Click-to-Run configuration.\n\n"
+                "You must enable them before retrying.");
             } else if (m365Status == Microsoft365UpdateStatus::NotInstalled) {
                 m365Enabled = false;
                 statusLabel->setText("Microsoft 365 Apps not installed");
             QMessageBox::warning(
                 windowPtr,
                 "Power Patch",
-                "Microsoft 365 Apps do not appear to be installed on this machine.\nUpdates cannot run.");
+                "Microsoft 365 Apps do not appear to be installed on this machine.\n\n"
+                "Updates cannot run.");
             }
         }
 
@@ -917,12 +930,13 @@ int main(int argc, char *argv[])
                         QMessageBox::warning(
                             windowPtr,
                             "Power Patch",
-                            "Windows Update did not start. The Settings page might not be available on this system.");
+                            "Windows Update did not start.\n\n"
+                            "The Settings page might not be available on this system.");
                     } else if (!winScanOk && winUiOk) {
                         QMessageBox::information(
                             windowPtr,
                             "Power Patch",
-                            "Windows Update opened, but the scan trigger wasn't available.\n"
+                            "Windows Update opened, but the scan trigger wasn't available.\n\n"
                             "If it doesn't automatically start scanning, click \"Check for updates\" in the Settings window.");
                     }
                 }
@@ -932,14 +946,14 @@ int main(int argc, char *argv[])
                         QMessageBox::warning(
                             windowPtr,
                             "Power Patch",
-                                    "Couldn't open the Microsoft Store Library page.\n"
-                                    "Make sure Microsoft Store is installed and enabled on this PC.");
+                            "Couldn't open the Microsoft Store Library page.\n\n"
+                            "Make sure Microsoft Store is installed and enabled on this PC.");
                     } else if (!storeClicked) {
                         QMessageBox::information(
                             windowPtr,
                             "Power Patch",
-                                    "Microsoft Store opened, but the app couldn't automatically click \"Check for updates\" or \"Update\".\n"
-                                    "If updates don't start automatically, click \"Check for updates\" in the Store Library.");
+                            "Microsoft Store opened, but the app couldn't automatically click \"Check for updates\" or \"Update\".\n\n"
+                            "If updates don't start automatically, click \"Check for updates\" in the Store Library.");
                     }
                 }
 
@@ -947,9 +961,10 @@ int main(int argc, char *argv[])
                     QMessageBox::warning(
                         windowPtr,
                         "Power Patch",
-                        "Couldn't start Microsoft 365 updates.\n"
-                        "This requires a local Microsoft 365 Apps / Office Click-to-Run install.\n"
-                        "If you're using a different Office installation type, update it via its own updater or management tooling.");
+                        "Couldn't start Microsoft 365 updates.\n\n"
+                        "This requires a local Microsoft 365 Apps / Office Click-to-Run install.\n\n"
+                        "If you use a different Office installation type,\n\n"
+                        "update it with its own updater or management tools.");
                 }
 
                 QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
@@ -960,7 +975,7 @@ int main(int argc, char *argv[])
         });
 #else
         statusLabel->setText("Unsupported platform");
-        QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows.");
+        QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows 11.");
         QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
             updateButtonStates();
             statusLabel->setText("Ready");
