@@ -4,7 +4,7 @@
     <img src="screenshot.jpg" alt="Screenshot">
 </p>
 
-A small **native Windows desktop app** that kicks off updates for the **three big buckets** in one place:
+A **native Windows desktop app** that kicks off updates for the **three big buckets** from one place:
 
 - **Windows OS** (opens Windows Update + triggers a scan when available).
 - **Microsoft Store apps** (opens Library and auto-clicks **Check for updates**).
@@ -14,18 +14,17 @@ A small **native Windows desktop app** that kicks off updates for the **three bi
 
 ## Why?
 
-Keeping a Windows PC current often means bouncing between Settings, the Store, and Office’s updater.  
-**Power Patch** is a quick launcher that starts those update checks with one click.
+Keeping a Windows PC current often means bouncing between Settings, the Store, and M365's updater.  
+**Power Patch** is a quick and easy launcher that starts those update checks with one click.
 
 ## Requirements
 
-- **Tested on Windows 11 25H2.**
+- Developed on **Windows 11 25H2**.
 - **Microsoft Store** installed/enabled (for Store app updates).
 - **Microsoft 365 Apps / Office Click-to-Run** install (for M365 updates).
 
 ### Building from source
 
-- Includes convenient dev scripts
 - **Visual Studio + MSVC**
 - **CMake**
 - **Qt 6**
