@@ -10,11 +10,23 @@ CTestTestfile.cmake
 Makefile
 *.cmake
 !CMakeLists.txt
+Testing/
+CMakeUserPresets.json
+CMakeSettings.json
 
 *_autogen/
 
 .vs/
 .vscode/
+*.code-workspace
+ipch/
+x64/
+x86/
+Win32/
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
 *.sln
 *.slnx
 *.vcxproj
@@ -44,3 +56,5 @@ Makefile
 
 .DS_Store
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

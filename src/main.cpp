@@ -764,10 +764,10 @@ int main(int argc, char *argv[])
         aboutBox.setWindowTitle("About Power Patch");
         const QString aboutHtml =
             "<p><b>Power Patch v1.1</b><br/>"
-            "Quick update launcher for Windows.</p>"
+            "Quick and easy update launcher for Windows.</p>"
             "<p><span style='color:#7a7a7a; font-size:small;'>Developed on Windows 11 25H2</span></p>"
             "<p>Windows Update: opens Settings + triggers scan.<br/>"
-            "Microsoft Store: opens Library + clicks Get updates.<br/>"
+            "Microsoft Store: opens Store + clicks update buttons.<br/>"
             "Microsoft 365: runs OfficeC2RClient update.</p>"
             "<p>Author: Shawn SSS</p>";
         aboutBox.setText(aboutHtml);

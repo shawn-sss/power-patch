@@ -4,7 +4,7 @@ This document lists the exact tools, versions, and paths expected by the scripts
 
 ## Required OS
 
-- Windows 10/11 (x64)
+- Windows 11 (x64)
 
 ## Required tools (exact expectations)
 

@@ -25,9 +25,11 @@ Keeping a Windows PC current often means bouncing between Settings, the Store, a
 
 ### Building from source
 
-- **Visual Studio + MSVC**
-- **CMake**
+- **Windows 11 (x64)**
+- **Visual Studio 2022 + MSVC**
 - **Qt 6**
+- **CMake**
+- **NSIS**
 
 ## Quick start
 
