@@ -1,0 +1,2 @@
+# Keep operational scripts in Batchfile but exclude them from language stats.
+scripts/** linguist-detectable=false
