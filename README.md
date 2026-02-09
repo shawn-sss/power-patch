@@ -1,7 +1,7 @@
 # Power Patch
 
 <p align="center">
-    <img src="screenshot.jpg" alt="Screenshot">
+    <img width="1200" height="475" src="screenshot.jpg" alt="Screenshot">
 </p>
 
 A **native Windows desktop app** that kicks off updates for the **three big buckets** from one place:
