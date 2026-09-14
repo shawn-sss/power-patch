@@ -37,6 +37,7 @@ Keeping a Windows PC current often means bouncing between Settings, the Store, a
 2. If Windows shows a SmartScreen warning, choose **More info** → **Run anyway**.
 3. **Select which updates to run**: Check or uncheck each update type.
 4. Click **Run selected updates** to run all checked updates, or use individual buttons.
+   While update checks are starting, a progress indicator is shown and update controls are locked to prevent duplicate runs. Power Patch starts the updaters; download and installation progress remains in each updater.
 5. Optional settings:
    - **Close update windows after starting updates** - Auto-closes update windows after initiating.
    - **Send app to system tray when closed** - Keeps the app running in the system tray instead of fully closing.
@@ -46,3 +47,7 @@ Keeping a Windows PC current often means bouncing between Settings, the Store, a
 - **Windows Update** can be restricted by **WSUS/MDM** and build capabilities.
 - **Store updates** are UI-driven and may break if Microsoft changes the Store interface.
 - **Office updates** run only when **Click-to-Run** is detected.
+
+## Checking changes
+
+See [the update-flow regression checklist](docs/update-flow-checks.md) for checks to run after building.

@@ -4,6 +4,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QProgressBar>
 #include <QFont>
 #include <QMessageBox>
 #include <QCheckBox>
@@ -412,6 +413,16 @@ int main(int argc, char *argv[])
     statusLabel->setObjectName("statusLabel");
     statusLabel->setWordWrap(true);
 
+    auto *progressBar = new QProgressBar();
+    progressBar->setRange(0, 0);
+    progressBar->setTextVisible(false);
+    progressBar->setFixedHeight(6);
+    progressBar->setAccessibleName("Starting update checks");
+    auto progressSizePolicy = progressBar->sizePolicy();
+    progressSizePolicy.setRetainSizeWhenHidden(true);
+    progressBar->setSizePolicy(progressSizePolicy);
+    progressBar->hide();
+
     auto *closeUpdateWindowsCheck = new QCheckBox("Close update windows after starting updates");
     closeUpdateWindowsCheck->setChecked(settings.value("closeUpdateWindows", false));
 
@@ -453,11 +464,11 @@ int main(int argc, char *argv[])
     });
 
     auto *allUpdateButton = new QPushButton("Run selected updates");
+    allUpdateButton->setDefault(true);
     allUpdateButton->setMinimumHeight(36);
     allUpdateButton->setCursor(Qt::PointingHandCursor);
 
     auto *winUpdateButton = new QPushButton("Run Windows updates");
-    winUpdateButton->setDefault(true);
     winUpdateButton->setMinimumHeight(34);
     winUpdateButton->setCursor(Qt::PointingHandCursor);
 
@@ -469,15 +480,24 @@ int main(int argc, char *argv[])
     m365UpdateButton->setMinimumHeight(34);
     m365UpdateButton->setCursor(Qt::PointingHandCursor);
 
-    auto updateButtonStates = [allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton,
-                               enableWindowsUpdateCheck, enableStoreUpdateCheck, enableM365UpdateCheck] {
+    bool updateInProgress = false;
+    auto updateButtonStates = [&updateInProgress, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton,
+                               enableWindowsUpdateCheck, enableStoreUpdateCheck, enableM365UpdateCheck,
+                               closeUpdateWindowsCheck, progressBar] {
+        const bool idle = !updateInProgress;
         const bool anyEnabled = enableWindowsUpdateCheck->isChecked()
                                 || enableStoreUpdateCheck->isChecked()
                                 || enableM365UpdateCheck->isChecked();
-        allUpdateButton->setEnabled(anyEnabled);
-        winUpdateButton->setEnabled(enableWindowsUpdateCheck->isChecked());
-        storeUpdateButton->setEnabled(enableStoreUpdateCheck->isChecked());
-        m365UpdateButton->setEnabled(enableM365UpdateCheck->isChecked());
+        allUpdateButton->setEnabled(idle && anyEnabled);
+        allUpdateButton->setText(idle ? "Run selected updates" : "Starting updates...");
+        winUpdateButton->setEnabled(idle && enableWindowsUpdateCheck->isChecked());
+        storeUpdateButton->setEnabled(idle && enableStoreUpdateCheck->isChecked());
+        m365UpdateButton->setEnabled(idle && enableM365UpdateCheck->isChecked());
+        enableWindowsUpdateCheck->setEnabled(idle);
+        enableStoreUpdateCheck->setEnabled(idle);
+        enableM365UpdateCheck->setEnabled(idle);
+        closeUpdateWindowsCheck->setEnabled(idle);
+        progressBar->setVisible(!idle);
     };
 
     QObject::connect(enableWindowsUpdateCheck, &QCheckBox::toggled, [updateButtonStates](bool) {
@@ -490,6 +510,18 @@ int main(int argc, char *argv[])
         updateButtonStates();
     });
     updateButtonStates();
+
+    auto beginUpdate = [&updateInProgress, updateButtonStates] {
+        if (updateInProgress)
+            return false;
+        updateInProgress = true;
+        updateButtonStates();
+        return true;
+    };
+    auto finishUpdate = [&updateInProgress, updateButtonStates] {
+        updateInProgress = false;
+        updateButtonStates();
+    };
 
     QSystemTrayIcon *trayIcon = nullptr;
     QMenu *trayMenu = nullptr;
@@ -572,10 +604,8 @@ int main(int argc, char *argv[])
     }
 
     QObject::connect(winUpdateButton, &QPushButton::clicked, [&] {
-        allUpdateButton->setEnabled(false);
-        winUpdateButton->setEnabled(false);
-        storeUpdateButton->setEnabled(false);
-        m365UpdateButton->setEnabled(false);
+        if (!beginUpdate())
+            return;
 
 #ifdef _WIN32
         const bool windowsDisabled = areWindowsUpdatesDisabled();
@@ -586,14 +616,14 @@ int main(int argc, char *argv[])
                 "Power Patch",
                 "Windows Update is disabled by the service or policy on this device.\n"
                 "Enable Windows Update before trying again.");
-            QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
-                updateButtonStates();
+            QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [finishUpdate, statusLabel] {
+                finishUpdate();
                 statusLabel->setText("Ready");
             });
         } else {
             statusLabel->setText("Checking Windows updates...");
             const bool closeAfter = closeUpdateWindowsCheck->isChecked();
-            (void)QtConcurrent::run([windowPtr, statusLabel, updateButtonStates, closeAfter] {
+            (void)QtConcurrent::run([windowPtr, statusLabel, finishUpdate, closeAfter] {
                 const bool uiOk = openWindowsUpdateSettings();
                 if (uiOk) {
                     QThread::msleep(static_cast<unsigned long>(kWaitBeforeWindowsScanMs));
@@ -605,7 +635,7 @@ int main(int argc, char *argv[])
                     closeWindowsUpdateWindowAfterDelay(0);
                 }
 
-                QMetaObject::invokeMethod(windowPtr, [windowPtr, statusLabel, updateButtonStates, scanOk, uiOk] {
+                QMetaObject::invokeMethod(windowPtr, [windowPtr, statusLabel, finishUpdate, scanOk, uiOk] {
                     if (!scanOk && !uiOk) {
                         QMessageBox::warning(
                             windowPtr,
@@ -623,8 +653,8 @@ int main(int argc, char *argv[])
                             "click \"Check for updates\" in the Settings window.");
                     }
 
-                    QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
-                        updateButtonStates();
+                    QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [finishUpdate, statusLabel] {
+                        finishUpdate();
                         statusLabel->setText("Ready");
                     });
                 }, Qt::QueuedConnection);
@@ -633,18 +663,16 @@ int main(int argc, char *argv[])
 #else
         statusLabel->setText("Unsupported platform");
         QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows 11.");
-        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
-            updateButtonStates();
+        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [finishUpdate, statusLabel] {
+            finishUpdate();
             statusLabel->setText("Ready");
         });
 #endif
     });
 
     QObject::connect(m365UpdateButton, &QPushButton::clicked, [&] {
-        allUpdateButton->setEnabled(false);
-        winUpdateButton->setEnabled(false);
-        storeUpdateButton->setEnabled(false);
-        m365UpdateButton->setEnabled(false);
+        if (!beginUpdate())
+            return;
 
 #ifdef _WIN32
         const Microsoft365UpdateStatus m365Status = queryMicrosoft365UpdateStatus();
@@ -686,17 +714,15 @@ int main(int argc, char *argv[])
         QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows 11.");
 #endif
 
-        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
-            updateButtonStates();
+        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [finishUpdate, statusLabel] {
+            finishUpdate();
             statusLabel->setText("Ready");
         });
     });
 
     QObject::connect(storeUpdateButton, &QPushButton::clicked, [&] {
-        allUpdateButton->setEnabled(false);
-        winUpdateButton->setEnabled(false);
-        storeUpdateButton->setEnabled(false);
-        m365UpdateButton->setEnabled(false);
+        if (!beginUpdate())
+            return;
 
 #ifdef _WIN32
         const MicrosoftStoreStatus storeStatus = queryMicrosoftStoreStatus();
@@ -717,14 +743,14 @@ int main(int argc, char *argv[])
         } else {
             statusLabel->setText("Checking Microsoft Store app updates...");
             const bool closeAfter = closeUpdateWindowsCheck->isChecked();
-            (void)QtConcurrent::run([windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton, closeAfter, updateButtonStates] {
+            (void)QtConcurrent::run([windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton, closeAfter, finishUpdate] {
                 const bool opened = openMicrosoftStoreLibrary();
                 bool clicked = false;
                 if (opened)
                     clicked = clickMicrosoftStoreGetUpdates(closeAfter);
 
                 QMetaObject::invokeMethod(windowPtr,
-                                         [windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton, opened, clicked, updateButtonStates] {
+                                         [windowPtr, statusLabel, allUpdateButton, winUpdateButton, storeUpdateButton, m365UpdateButton, opened, clicked, finishUpdate] {
                     if (!opened) {
                         QMessageBox::warning(
                             windowPtr,
@@ -741,25 +767,28 @@ int main(int argc, char *argv[])
                             "click \"Check for updates\" in the Store Library.");
                     }
 
-                    QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
-                        updateButtonStates();
+                    QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [finishUpdate, statusLabel] {
+                        finishUpdate();
                         statusLabel->setText("Ready");
                     });
                 },
                                          Qt::QueuedConnection);
             });
+            return;
         }
 #else
         statusLabel->setText("Unsupported platform");
         QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows 11.");
-        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
-            updateButtonStates();
+#endif
+        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [finishUpdate, statusLabel] {
+            finishUpdate();
             statusLabel->setText("Ready");
         });
-#endif
     });
 
     auto *aboutButton = new QPushButton();
+    aboutButton->setAccessibleName("About Power Patch");
+    aboutButton->setToolTip("About Power Patch");
     aboutButton->setMinimumSize(30, 30);
     aboutButton->setIcon(window.style()->standardIcon(QStyle::SP_MessageBoxInformation));
     aboutButton->setCursor(Qt::PointingHandCursor);
@@ -799,6 +828,7 @@ int main(int argc, char *argv[])
     mainLayout->addWidget(subtitleLabel);
     mainLayout->addItem(new QSpacerItem(0, 6, QSizePolicy::Minimum, QSizePolicy::Fixed));
     mainLayout->addWidget(statusLabel);
+    mainLayout->addWidget(progressBar);
     mainLayout->addWidget(closeUpdateWindowsCheck);
     mainLayout->addWidget(trayOnCloseCheck);
     auto *divider = new QFrame();
@@ -814,10 +844,8 @@ int main(int argc, char *argv[])
             return;
         }
 
-        allUpdateButton->setEnabled(false);
-        winUpdateButton->setEnabled(false);
-        storeUpdateButton->setEnabled(false);
-        m365UpdateButton->setEnabled(false);
+        if (!beginUpdate())
+            return;
 
 #ifdef _WIN32
         if (winEnabled && areWindowsUpdatesDisabled()) {
@@ -873,15 +901,15 @@ int main(int argc, char *argv[])
         }
 
         if (!winEnabled && !storeEnabled && !m365Enabled) {
-            QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
-                updateButtonStates();
+            QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [finishUpdate, statusLabel] {
+                finishUpdate();
                 statusLabel->setText("Ready");
             });
             return;
         }
 
         const bool closeAfter = closeUpdateWindowsCheck->isChecked();
-        (void)QtConcurrent::run([windowPtr, statusLabel, closeAfter, winEnabled, storeEnabled, m365Enabled, updateButtonStates] {
+        (void)QtConcurrent::run([windowPtr, statusLabel, closeAfter, winEnabled, storeEnabled, m365Enabled, finishUpdate] {
             bool winScanOk = false;
             bool winUiOk = false;
             bool storeOpened = false;
@@ -924,7 +952,7 @@ int main(int argc, char *argv[])
 
             QMetaObject::invokeMethod(windowPtr,
                                      [windowPtr, statusLabel, winEnabled, storeEnabled, m365Enabled,
-                                      winScanOk, winUiOk, storeOpened, storeClicked, officeOk, updateButtonStates] {
+                                      winScanOk, winUiOk, storeOpened, storeClicked, officeOk, finishUpdate] {
                 if (winEnabled) {
                     if (!winScanOk && !winUiOk) {
                         QMessageBox::warning(
@@ -967,8 +995,8 @@ int main(int argc, char *argv[])
                         "update it with its own updater or management tools.");
                 }
 
-                QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
-                    updateButtonStates();
+                QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [finishUpdate, statusLabel] {
+                    finishUpdate();
                     statusLabel->setText("Ready");
                 });
             }, Qt::QueuedConnection);
@@ -976,8 +1004,8 @@ int main(int argc, char *argv[])
 #else
         statusLabel->setText("Unsupported platform");
         QMessageBox::warning(windowPtr, "Power Patch", "This feature is only supported on Windows 11.");
-        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [updateButtonStates, statusLabel] {
-            updateButtonStates();
+        QTimer::singleShot(kReenableButtonsDelayMs, windowPtr, [finishUpdate, statusLabel] {
+            finishUpdate();
             statusLabel->setText("Ready");
         });
 #endif
