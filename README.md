@@ -1,53 +1,32 @@
 # Power Patch
 
-<p align="center">
-    <img width="1200" height="475" src="screenshot.jpg" alt="Screenshot">
-</p>
+A compact Windows app that starts Windows, Microsoft Store, and Microsoft 365 update checks from one panel. Download and installation progress stays in each updater.
 
-A **native Windows desktop app** that kicks off updates for the **three big buckets** from one place:
+## Setup
 
-- **Windows OS** (opens Windows Update + triggers a scan when available).
-- **Microsoft Store apps** (opens Library and auto-clicks **Check for updates**).
-- **Microsoft 365** (launches OfficeC2RClient update).
+**Packaged app:** On Windows 11 x64, extract the complete release package and run `bin\powerpatch.exe`, or run the self-extracting `powerpatch.exe`. Store and Office updates require their respective apps to be installed and enabled.
 
----
+**Build from source:**
 
-## Why?
+1. Install Visual Studio with the Desktop C++ workload and Windows SDK, CMake 3.22+, and Qt 6 Widgets/Concurrent using the `msvc2022_64` kit.
+2. Open an **x64 Native Tools Command Prompt** in the repository folder.
+3. Run the commands below, adjusting both Qt paths to your installed version:
 
-Keeping a Windows PC current often means bouncing between Settings, the Store, and M365's updater.  
-**Power Patch** is a quick and easy launcher that starts those update checks with one click.
+```bat
+cmake -S . -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DQt6_DIR="C:\Qt\6.10.1\msvc2022_64\lib\cmake\Qt6"
+cmake --build build
+set "PATH=C:\Qt\6.10.1\msvc2022_64\bin;%PATH%"
+build\powerpatch.exe
+```
 
-## Requirements
+Select your update sources, then click **Run selected updates**.
 
-- Developed on **Windows 11 25H2**.
-- **Microsoft Store** installed/enabled (for Store app updates).
-- **Microsoft 365 Apps / Office Click-to-Run** install (for M365 updates).
+## Documentation
 
-### Building from source
+- [User guide and troubleshooting](docs/user-guide.md)
+- [Development setup and scripts](docs/dev-environment.md)
+- [Tests and regression checks](docs/update-flow-checks.md)
+- [Packaging and versioning](docs/standalone-versioning.md)
+- [Architecture](docs/architecture.md)
 
-- **Windows 11 (x64)**
-- **Visual Studio 2022 + MSVC**
-- **Qt 6**
-- **CMake**
-- **NSIS**
-
-## Quick start
-
-1. Launch Power Patch.
-2. If Windows shows a SmartScreen warning, choose **More info** → **Run anyway**.
-3. **Select which updates to run**: Check or uncheck each update type.
-4. Click **Run selected updates** to run all checked updates, or use individual buttons.
-   While update checks are starting, a progress indicator is shown and update controls are locked to prevent duplicate runs. Power Patch starts the updaters; download and installation progress remains in each updater.
-5. Optional settings:
-   - **Close update windows after starting updates** - Auto-closes update windows after initiating.
-   - **Send app to system tray when closed** - Keeps the app running in the system tray instead of fully closing.
-
-## Notes
-
-- **Windows Update** can be restricted by **WSUS/MDM** and build capabilities.
-- **Store updates** are UI-driven and may break if Microsoft changes the Store interface.
-- **Office updates** run only when **Click-to-Run** is detected.
-
-## Checking changes
-
-See [the update-flow regression checklist](docs/update-flow-checks.md) for checks to run after building.
+[MIT license](LICENSE).

@@ -352,7 +352,7 @@ bool clickMicrosoftStoreGetUpdates(bool closeAfter)
             Sleep(kStoreButtonPollSleepMs);
     }
 
-    if (closeAfter) {
+    if (closeAfter && (clickedCheck || clickedUpdates)) {
         Sleep(kStoreCloseWaitMs);
         closeWindowHandle(storeHwnd);
     }

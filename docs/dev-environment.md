@@ -1,84 +1,81 @@
-# Development Environment Setup
+# Development environment
 
-This document lists the exact tools, versions, and paths expected by the scripts so a new machine can be set up quickly and reproducibly.
+These instructions describe the repository's current configuration and scripts, reviewed on 2026-10-07. Run commands from the repository root unless stated otherwise.
 
-## Required OS
+## Toolchain
 
-- Windows 11 (x64)
+| Tool | Project requirement / script behavior |
+| --- | --- |
+| Windows | Windows 11 x64. The updater implementation and startup replacement tests use Windows APIs. |
+| Visual Studio / MSVC | Desktop C++ workload and a Windows SDK. Scripts use `vswhere.exe -latest` and `VC\Auxiliary\Build\vcvars64.bat`, rather than pinning a Visual Studio release. The latest local validation used Visual Studio 18 Community. |
+| CMake | 3.22 or newer, on PATH. The minimum is declared in [CMakeLists.txt](../CMakeLists.txt). |
+| Qt | Qt 6 Widgets and Concurrent, with the `msvc2022_64` kit. Scripts prefer `C:\Qt\6.11.0\msvc2022_64`, then `C:\Qt\6.10.1\msvc2022_64`. Local validation used 6.10.1. |
+| NSIS | Only for the self-extracting wrapper. The script accepts `NSIS_BIN` as the full path to `makensis.exe`, otherwise searches PATH and `%ProgramFiles(x86)%\NSIS\makensis.exe`. |
 
-## Required tools (exact expectations)
+The batch defaults live in [project_settings.bat](../scripts/cmake/project_settings.bat): `NMake Makefiles`, `build`, `dist`, and `install`. For a different Qt location, use explicit CMake commands or edit those defaults. The scripts overwrite their Qt path variables; setting a different `QT_ROOT` in your shell is not an override.
 
-1) Visual Studio (MSVC)
-   - VS 2022 with C++ toolset installed
-   - The scripts locate VS via `vswhere.exe` and call `vcvars64.bat`
-   - Default search path: `%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe`
+## Configure and build directly
 
-2) CMake
-   - Must be on `PATH`
-   - Used by all build/package scripts
+Open an **x64 Native Tools Command Prompt** for the installed Visual Studio version. This supplies MSVC, the Windows SDK, and NMake. Substitute your Qt version/path as needed.
 
-3) Qt 6 (MSVC 2022 x64)
-   - Kit: `msvc2022_64`
-   - Preferred version: `6.11.0`
-   - Fallback version: `6.10.1`
-   - Expected install root:
-     - `C:\Qt\6.11.0\msvc2022_64`
-     - `C:\Qt\6.10.1\msvc2022_64`
-   - The scripts expect `Qt6Config.cmake` at:
-     - `C:\Qt\<version>\msvc2022_64\lib\cmake\Qt6\Qt6Config.cmake`
+```bat
+cmake -S . -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DQt6_DIR="C:\Qt\6.10.1\msvc2022_64\lib\cmake\Qt6" -DBUILD_TESTING=ON
+cmake --build build
+ctest --test-dir build --output-on-failure -C Release
+scripts\run\run_release.bat
+```
 
-4) NSIS (only for packaging standalone EXE)
-   - `makensis.exe` on `PATH`, or
-   - installed at `%ProgramFiles(x86)%\NSIS\makensis.exe`
+With the default single-configuration NMake generator, build type is chosen at **configure time**. `--config Debug` does not turn a Release NMake tree into Debug. For an actual Debug build, use a separate directory:
 
-## Project scripts and what they do
+```bat
+cmake -S . -B build-debug -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Debug -DQt6_DIR="C:\Qt\6.10.1\msvc2022_64\lib\cmake\Qt6" -DBUILD_TESTING=ON
+cmake --build build-debug
+ctest --test-dir build-debug --output-on-failure -C Debug
+set "PATH=C:\Qt\6.10.1\msvc2022_64\bin;%PATH%"
+build-debug\powerpatch.exe
+```
 
-### One-click dev run
+The existing run scripts use `build`, not `build-debug`. NMake ignores the scripts' `--parallel` flag. Configure with `-DBUILD_TESTING=OFF` to omit test executables. No Qt Test module is required.
 
-- `scripts/oneclick/run_debug_build.bat`
-  - Runs:
-    - `scripts/cmake/cmake_configure.bat`
-    - `scripts/cmake/cmake_build_debug.bat`
-    - `scripts/run/run_debug.bat`
+Close all copies of the target executable before rebuilding it; Windows can lock the file and produce `LNK1104`. Startup replacement happens when the app runs, not before the linker writes an executable.
 
-### One-click packaging
+## Batch script reference
 
-- `scripts/oneclick/create_standalone_exe.bat`
-  - Runs:
-    - `scripts/release/build_standalone_exe.bat`
-  - Output:
-    - `dist\Portable Self-Extracting\powerpatch.exe`
+Most scripts pause before returning, including when invoked by the one-click scripts. Use direct CMake commands for unattended development.
 
-## Paths and settings used by scripts
+| Script (under `scripts/`) | Actual behavior |
+| --- | --- |
+| `cmake/project_settings.bat` | Prints defaults; `--from-script` sets variables in its caller without pausing. |
+| `cmake/cmake_configure.bat` | **Deletes `build`**, then configures a Release NMake tree. |
+| `cmake/cmake_reconfigure.bat` | Requires an existing `build` directory and reconfigures it as Release without deleting it. |
+| `cmake/cmake_build_release.bat` | Builds the existing tree with `--config Release`. |
+| `cmake/cmake_build_debug.bat` | Builds the existing tree with `--config Debug`; it does not change NMake's configured build type. |
+| `run/run_release.bat`, `run/run_debug.bat` | Add the selected Qt bin directory to PATH and run the corresponding configuration subdirectory, falling back to `build\powerpatch.exe`. |
+| `oneclick/run_debug_build.bat` | Calls configure, Debug build, then Debug run. Despite its name, its configure step currently selects **Release** and deletes `build`. Use the direct Debug commands above for debug symbols/behavior. |
+| `cmake/cmake_install_release.bat` | Deletes `install`, then installs the app executable there; this alone does not deploy Qt runtime dependencies. |
+| `cmake/cmake_clean_build.bat` | Deletes `build`. |
+| `cmake/cmake_clean_all.bat` | Deletes `build`, `dist`, and `install`. Custom directories such as `build-debug` are not included. |
+| `release/build_package.bat` | Builds, installs, deploys Qt with `windeployqt`, and attempts a ZIP. Supports `--reconfigure` and `--no-pause`. |
+| `release/build_standalone_exe.bat` | Deletes `dist`, builds a release bundle, minimizes a copied payload, then compiles an NSIS wrapper. Its `--skip-package` option currently cannot reliably reuse a bundle because `dist` is deleted first. |
+| `oneclick/create_standalone_exe.bat` | Calls the standalone builder and pauses. |
+| `release/minimize_qt_build.bat` | Removes selected runtime modules, plugins, translations, and debug files from the supplied payload directory. |
+| `release/generate_package_list.bat` | Writes a recursive package listing to `package_list.txt` in the supplied payload directory. |
 
-Defined in `scripts/cmake/project_settings.bat`:
+See [packaging and versioning](standalone-versioning.md) before distributing an artifact.
 
-- `CMAKE_GENERATOR=NMake Makefiles`
-- `CMAKE_ARCH=x64`
-- `QT_KIT=msvc2022_64`
-- `QT_PREFERRED_VERSION=6.11.0`
-- `QT_FALLBACK_VERSION=6.10.1`
-- `QT_ROOT=C:\Qt\<version>\msvc2022_64`
-- `QT6_DIR=<QT_ROOT>\lib\cmake\Qt6`
-- `QT_BIN=<QT_ROOT>\bin`
-- `BUILD_DIR=build`
-- `DIST_DIR=dist`
+## Tests and previews
 
-## Common setup checklist (new PC)
+`BUILD_TESTING` defaults to ON. On Windows, CTest registers `startup_checks`, `dashboard_checks`, `dashboard_checks_150`, and `dashboard_checks_200`. CTest supplies the Qt DLL directory through PATH and uses the offscreen Qt platform for dashboard checks. No desktop interaction or real updater launch is required.
 
-1) Install Visual Studio 2022 with the Desktop C++ workload.
-2) Install CMake and confirm `cmake` is on `PATH`.
-3) Install Qt 6.11.0 (or 6.10.1 fallback) for `msvc2022_64` into `C:\Qt`.
-4) Install NSIS if you need standalone packaging.
-5) Open a new terminal and run:
-   - `scripts\oneclick\run_debug_build.bat`
-6) For packaging, run:
-   - `scripts\oneclick\create_standalone_exe.bat`
+Dashboard previews are saved under the active build directory in `previews`, `previews-150`, and `previews-200`. The user guide image is copied from `previews/dashboard-dark.png`; regenerate and refresh `docs/images/dashboard.png` after UI changes. The root `screenshot.jpg` is a legacy asset and is no longer used in the documentation.
+
+See [the test checklist](update-flow-checks.md) for coverage and manual Windows checks.
 
 ## Troubleshooting
 
-- If the scripts fail to find Qt, confirm:
-  - The Qt version folder exists under `C:\Qt\`
-  - `Qt6Config.cmake` exists under `lib\cmake\Qt6`
-- If `nmake` is missing, ensure VS 2022 C++ tools are installed and that `vcvars64.bat` is available.
-- If packaging fails, confirm `makensis.exe` is installed and on `PATH`.
+- **Qt6Config.cmake not found:** check `lib\cmake\Qt6` under the selected kit and use an explicit `-DQt6_DIR` if the scripts' defaults do not apply.
+- **NMake, compiler, or Windows headers missing:** use the x64 developer prompt or repair the C++ workload/SDK. Most scripts search `vswhere.exe` under Program Files (x86), then Program Files.
+- **Qt DLL or platform plugin missing:** use the run script with the matching Qt kit, or distribute the complete `windeployqt` package. A raw build EXE is not standalone.
+- **Preferences do not persist in tests:** tests create files in the system temporary directory. Restricted execution environments must allow those files and QSettings lock/atomic-save operations.
+- **CMake reports a generator mismatch:** use a different build directory for a different generator; do not reuse a configured NMake tree as a Visual Studio tree.
+- **Standalone compilation fails:** inspect `dist\Build Logs\powerpatch_standalone_build.log` and `powerpatch_standalone_nsis.log`; verify `NSIS_BIN` or NSIS discovery.
