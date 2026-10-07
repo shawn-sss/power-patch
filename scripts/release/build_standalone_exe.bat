@@ -6,14 +6,11 @@ cd /d "%~dp0..\.."
 call "scripts\cmake\project_settings.bat" --from-script
 set "ROOT_DIR=%CD%"
 set "SKIP_PACKAGE=0"
-
-if exist "%DIST_DIR%" (
-  echo [Standalone] Removing existing dist folder...
-  rmdir /s /q "%DIST_DIR%"
-)
+set "NO_PAUSE=0"
 
 for %%A in (%*) do (
   if /i "%%~A"=="--skip-package" set "SKIP_PACKAGE=1"
+  if /i "%%~A"=="--no-pause" set "NO_PAUSE=1"
 )
 
 set "LOG_FILE=%ROOT_DIR%\%DIST_DIR%\Build Logs\%PROJECT_NAME%_standalone_build.log"
@@ -33,11 +30,16 @@ if "%SKIP_PACKAGE%"=="0" (
   call :check_package_result
   if errorlevel 1 goto :endfail
 ) else (
-  echo [Standalone] Skipping build_package (--skip-package specified)
-  echo [Standalone] Skipping build_package (--skip-package specified) >> "%LOG_FILE%"
+  echo [Standalone] Reusing release package: --skip-package
+  echo [Standalone] Reusing release package: --skip-package >> "%LOG_FILE%"
 )
 
 set "PKG_ROOT=%DIST_DIR%\Build Package\%PROJECT_NAME%"
+if not exist "%PKG_ROOT%\bin\%PROJECT_NAME%.exe" (
+  echo [ERROR] Release package missing. Run without --skip-package first.
+  echo [ERROR] Release package missing at "%PKG_ROOT%". >> "%LOG_FILE%"
+  goto :endfail
+)
 goto :after_check
 
 :check_package_result
@@ -230,12 +232,14 @@ goto :endok
 
 :endfail
 echo.
+if "%NO_PAUSE%"=="1" exit /b 1
 echo [FAIL] Press any key to close...
 pause >nul
 exit /b 1
 
 :endok
 echo.
+if "%NO_PAUSE%"=="1" exit /b 0
 echo [DONE] Press any key to close...
 pause >nul
 exit /b 0

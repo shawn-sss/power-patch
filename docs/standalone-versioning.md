@@ -18,14 +18,18 @@ For the self-extracting wrapper:
 scripts\oneclick\create_standalone_exe.bat
 ```
 
-The wrapper builder deletes the existing `dist` tree first, recreates the release bundle, mirrors it into `dist\Build Artifacts\payload`, minimizes selected Qt files, generates `package.nsi`, and invokes NSIS. Output is `dist\Portable Self-Extracting\powerpatch.exe`. It also generates `payload\package_list.txt` as a build reference; extraction includes `payload\bin`, not that top-level listing.
+The wrapper builder recreates the release bundle, refreshes `dist\Build Artifacts\payload`, minimizes selected Qt files, generates `package.nsi`, and invokes NSIS. It retains the rest of `dist`. Output is `dist\Portable Self-Extracting\powerpatch.exe`. It also generates `payload\package_list.txt` as a build reference; extraction includes `payload\bin`, not that top-level listing. Deployment uses common `windeployqt` options rather than module-specific switches that may be absent from the installed Qt kit.
 
 Logs are under `dist\Build Logs`:
 
 - `powerpatch_standalone_build.log`
 - `powerpatch_standalone_nsis.log`
 
-The wrapper's `--skip-package` option is currently unsuitable for reusing an existing bundle: the script deletes `dist` before processing that option. Use the full build path. The wrapper script pauses, even though its nested package build uses `--no-pause`.
+To rebuild only the wrapper from an existing release package, pass `--skip-package`. A missing package produces an error before existing wrapper output is removed. This reuses the package exactly as it exists; omit the flag after source changes to rebuild the app too. Both the standalone builder and one-click entry point support `--no-pause`, and the one-click entry point returns a failing exit status when the build fails:
+
+```bat
+scripts\oneclick\create_standalone_exe.bat --skip-package --no-pause
+```
 
 The payload minimizer removes selected DLLs/plugins and translations. Recheck deployment dependencies when adding Qt functionality; do not assume a previously minimized runtime supports new features.
 
@@ -56,7 +60,7 @@ The source of truth is [standalone.nsi.template](../scripts/release/standalone.n
 4. Otherwise, copy a legacy root-level `settings.ini`, if present, to the temporary backup, recursively remove the extraction directory, and recreate it.
 5. Restore the temporary legacy settings backup if it exists, extract `payload\bin\*.*`, write the new `version.txt`, and launch the app.
 
-The checks test **file existence**, not hashes, integrity, or the complete dependency set. `Qt6Concurrent.dll` is an application dependency but is not on the wrapper's skip-extraction checklist. The application no longer has the old AppData-only DLL validation block in `main.cpp`; there is no matching second checklist inside the app.
+The checks test **file existence**, not hashes, integrity, or the complete dependency set. Qt Concurrent is a build dependency, but the current Release executable imports only Qt Core, Gui, and Widgets DLLs; its use of Concurrent templates does not require a separate `Qt6Concurrent.dll` in this build. Check the executable's actual imports when changing dependencies. The application no longer has the old AppData-only DLL validation block in `main.cpp`; there is no matching second checklist inside the app.
 
 ## Known extraction and upgrade limitations
 
@@ -66,7 +70,7 @@ The checks test **file existence**, not hashes, integrity, or the complete depen
 - **Same-version builds can reuse old code.** If `version.txt` and the file-existence checks match, a newly built wrapper does not replace the installed executable. Increment the release version when distributing changed payloads.
 - **This is not a transactional installer.** The template does not validate every delete/copy/extract operation or roll back a failed upgrade. Verify upgrades and recovery manually on a test machine.
 
-These are limitations of the current release scripts, not guarantees provided by the application. This documentation review did not change the packaging implementation.
+These are limitations of the current release scripts, not guarantees provided by the application.
 
 ## App startup versus wrapper startup
 
@@ -90,7 +94,7 @@ CMake defines `POWERPATCH_VERSION`; `main.cpp` assigns it as the application ver
 
 1. Update version sources and docs/screenshots for the release.
 2. Build and pass all [automated checks](update-flow-checks.md), then complete the relevant manual updater tests.
-3. Build the package and wrapper, inspect their logs and actual outputs, and retain artifacts outside `dist` if needed before another wrapper build.
+3. Build the package and wrapper, inspect their logs and actual outputs, and archive release artifacts before rebuilding. A full build replaces the package folder and ZIP; both full and `--skip-package` wrapper builds replace `dist\Build Artifacts`, the wrapper executable, and standalone logs. Other `dist` contents remain.
 4. On a test Windows account without Qt on PATH, launch the deployed folder and wrapper. Check runtime dependencies and icons.
 5. Test first extraction, same-version reuse, changed-version extraction, and missing-runtime recovery. Back up current settings and verify their state after each case; the current template does not preserve them automatically on re-extraction.
 6. Verify About, executable version metadata, generated NSIS `APP_VERSION`, and installed `version.txt` agree. Confirm the installed executable contains the intended changes.

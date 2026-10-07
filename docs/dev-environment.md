@@ -41,7 +41,7 @@ Close all copies of the target executable before rebuilding it; Windows can lock
 
 ## Batch script reference
 
-Most scripts pause before returning, including when invoked by the one-click scripts. Use direct CMake commands for unattended development.
+Most development scripts pause before returning. Use direct CMake commands for unattended development; packaging and the standalone one-click entry point also support `--no-pause`.
 
 | Script (under `scripts/`) | Actual behavior |
 | --- | --- |
@@ -56,14 +56,16 @@ Most scripts pause before returning, including when invoked by the one-click scr
 | `cmake/cmake_clean_build.bat` | Deletes `build`. |
 | `cmake/cmake_clean_all.bat` | Deletes `build`, `dist`, and `install`. Custom directories such as `build-debug` are not included. |
 | `release/build_package.bat` | Builds, installs, deploys Qt with `windeployqt`, and attempts a ZIP. Supports `--reconfigure` and `--no-pause`. |
-| `release/build_standalone_exe.bat` | Deletes `dist`, builds a release bundle, minimizes a copied payload, then compiles an NSIS wrapper. Its `--skip-package` option currently cannot reliably reuse a bundle because `dist` is deleted first. |
-| `oneclick/create_standalone_exe.bat` | Calls the standalone builder and pauses. |
+| `release/build_standalone_exe.bat` | Builds a release bundle, refreshes its working payload, minimizes it, and compiles an NSIS wrapper. Supports `--skip-package` to reuse an existing package and `--no-pause` for unattended runs. It does not delete the entire `dist` tree. |
+| `oneclick/create_standalone_exe.bat` | Calls the standalone builder, forwards arguments, and returns its success/failure status. Pauses once unless `--no-pause` is supplied. |
 | `release/minimize_qt_build.bat` | Removes selected runtime modules, plugins, translations, and debug files from the supplied payload directory. |
 | `release/generate_package_list.bat` | Writes a recursive package listing to `package_list.txt` in the supplied payload directory. |
 
 See [packaging and versioning](standalone-versioning.md) before distributing an artifact.
 
 ## Tests and previews
+
+Generated build trees, `install`, and all of `dist` are ignored by Git, including release ZIPs, copied payloads, generated NSIS scripts, wrapper executables, and packaging logs. Root preview directories, local settings, compiler outputs, and editor caches are also ignored. Keep source templates, shared CMake presets, and published `docs/images` assets tracked; use `git status --short --ignored` to inspect local output coverage.
 
 `BUILD_TESTING` defaults to ON. On Windows, CTest registers `startup_checks`, `dashboard_checks`, `dashboard_checks_150`, and `dashboard_checks_200`. CTest supplies the Qt DLL directory through PATH and uses the offscreen Qt platform for dashboard checks. No desktop interaction or real updater launch is required.
 
@@ -79,3 +81,4 @@ See [the test checklist](update-flow-checks.md) for coverage and manual Windows 
 - **Preferences do not persist in tests:** tests create files in the system temporary directory. Restricted execution environments must allow those files and QSettings lock/atomic-save operations.
 - **CMake reports a generator mismatch:** use a different build directory for a different generator; do not reuse a configured NMake tree as a Visual Studio tree.
 - **Standalone compilation fails:** inspect `dist\Build Logs\powerpatch_standalone_build.log` and `powerpatch_standalone_nsis.log`; verify `NSIS_BIN` or NSIS discovery.
+- **windeployqt rejects a module option:** module-specific switches such as `--no-pdf` exist only when that module is installed. The package script uses common deployment options and lets Qt discover the required libraries.

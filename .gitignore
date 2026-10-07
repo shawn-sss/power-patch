@@ -3,6 +3,7 @@
 /build-*/
 /build_*/
 /cmake-build*/
+# Release packages, ZIPs, NSIS scripts/payloads, wrappers, and build logs.
 /dist/
 /install/
 /out/

@@ -124,7 +124,9 @@ if not exist "!PKG_EXE!" (
 
 echo.
 echo [Package] Running windeployqt...
-"!WINDEPLOYQT!" "!PKG_EXE!" --no-svg --no-pdf --no-network --no-translations --no-opengl-sw
+REM Module-specific --no-* flags depend on which Qt modules are installed.
+REM Let windeployqt discover dependencies; use only common deployment options.
+"!WINDEPLOYQT!" "!PKG_EXE!" --release --no-translations --no-opengl-sw
 set "EC=!ERRORLEVEL!"
 if not "!EC!"=="0" (
   echo.
