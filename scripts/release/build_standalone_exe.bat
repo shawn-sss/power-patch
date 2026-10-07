@@ -130,7 +130,7 @@ set "APP_VERSION="
 for /f "tokens=3" %%V in ('findstr /r "project.*VERSION" "%ROOT_DIR%\CMakeLists.txt"') do (
   set "APP_VERSION=%%V"
 )
-if not defined APP_VERSION set "APP_VERSION=0.1.0"
+if not defined APP_VERSION set "APP_VERSION=1.1.0"
 
 set "NSIS_OUTPUT=%NSIS_SCRIPT%"
 echo [Standalone] NSIS script: %NSIS_SCRIPT% >> "%LOG_FILE%"

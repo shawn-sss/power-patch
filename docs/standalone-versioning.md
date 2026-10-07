@@ -76,14 +76,15 @@ This affects the actual app process, not the self-extracting wrapper's file oper
 
 ## Version sources
 
-The current source version is `1.0.1`. Update these together for a release:
+The current source version is `1.1.0`. Update these together for a release:
 
 1. [CMakeLists.txt](../CMakeLists.txt): `project(powerpatch VERSION X.Y.Z ...)`.
 2. [src/app_resources.rc](../src/app_resources.rc): numeric `FILEVERSION` / `PRODUCTVERSION` and string `FileVersion` / `ProductVersion`.
+3. [scripts/release/build_standalone_exe.bat](../scripts/release/build_standalone_exe.bat): the fallback `APP_VERSION` value if CMake version parsing fails.
 
 CMake defines `POWERPATCH_VERSION`; `main.cpp` assigns it as the application version and the dashboard reads it for About. No hard-coded About version needs editing.
 
-`build_standalone_exe.bat` extracts the third token of the CMake `project(... VERSION ...)` line and substitutes it into the NSIS template. Keep that declaration compatible with this simple parser and inspect the generated `APP_VERSION`; the script silently falls back to `0.1.0` if parsing fails. The wrapper writes that value to `version.txt`.
+`build_standalone_exe.bat` extracts the third token of the CMake `project(... VERSION ...)` line and substitutes it into the NSIS template. Keep that declaration compatible with this simple parser and inspect the generated `APP_VERSION`; the script silently falls back to `1.1.0` if parsing fails. The wrapper writes that value to `version.txt`.
 
 ## Release checklist
 
